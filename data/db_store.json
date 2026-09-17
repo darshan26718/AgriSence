@@ -1,0 +1,428 @@
+{
+  "fields": [
+    {
+      "id": "FLD-001",
+      "name": "North Sector Plot A-1",
+      "crop": "Rice (Paddy)",
+      "variety": "Basmati-370",
+      "area_acres": 4.5,
+      "location": "Punjab - Amritsar Plains",
+      "soil_type": "Clay Loam (Alluvial)",
+      "growth_stage": "Tillering",
+      "health_score": 52,
+      "disease_risk": "CRITICAL",
+      "pest_risk": "LOW",
+      "last_inspection": "2026-08-10",
+      "active_alerts": 2,
+      "recommended_action": "Apply tricyclazole blast fungicide immediately; drain stagnant water to aerate canopy."
+    },
+    {
+      "id": "FLD-002",
+      "name": "Godavari Basin South Block",
+      "crop": "Rice (Paddy)",
+      "variety": "IR-64",
+      "area_acres": 6.2,
+      "location": "Andhra Pradesh - Kurnool",
+      "soil_type": "Black Cotton Soil",
+      "growth_stage": "Panicle Initiation",
+      "health_score": 58,
+      "disease_risk": "HIGH",
+      "pest_risk": "HIGH",
+      "last_inspection": "2026-08-12",
+      "active_alerts": 2,
+      "recommended_action": "Check basal stems for Brown Planthopper; spray copper hydroxide for bacterial leaf blight."
+    },
+    {
+      "id": "FLD-003",
+      "name": "Karnal Central Research Acre",
+      "crop": "Wheat",
+      "variety": "HD-2967",
+      "area_acres": 5,
+      "location": "Haryana - Karnal",
+      "soil_type": "Sandy Loam",
+      "growth_stage": "Jointing",
+      "health_score": 88,
+      "disease_risk": "LOW",
+      "pest_risk": "LOW",
+      "last_inspection": "2026-07-28",
+      "active_alerts": 0,
+      "recommended_action": "Optimal vegetative health. Maintain scheduled light irrigation and routine flag leaf scouting."
+    },
+    {
+      "id": "FLD-004",
+      "name": "Kolar Valley Polyhouse-02",
+      "crop": "Tomato",
+      "variety": "Pusa Ruby",
+      "area_acres": 2.8,
+      "location": "Karnataka - Kolar",
+      "soil_type": "Red Sandy Loam",
+      "growth_stage": "Fruiting",
+      "health_score": 48,
+      "disease_risk": "CRITICAL",
+      "pest_risk": "HIGH",
+      "last_inspection": "2026-08-14",
+      "active_alerts": 3,
+      "recommended_action": "Prune blighted lower leaves; deploy yellow sticky traps; apply mancozeb protectant before next rain spell."
+    },
+    {
+      "id": "FLD-005",
+      "name": "Agra Potato Belt Plot 4",
+      "crop": "Potato",
+      "variety": "Kufri Jyoti",
+      "area_acres": 3.8,
+      "location": "Uttar Pradesh - Agra",
+      "soil_type": "Alluvial Loam",
+      "growth_stage": "Tuber Bulking",
+      "health_score": 42,
+      "disease_risk": "CRITICAL",
+      "pest_risk": "MODERATE",
+      "last_inspection": "2026-08-11",
+      "active_alerts": 2,
+      "recommended_action": "Urgent: High late blight risk. Apply cymoxanil+mancozeb fungicide; earth-up tubers against spore runoff."
+    },
+    {
+      "id": "FLD-006",
+      "name": "Cotton Demonstration Farm",
+      "crop": "Cotton",
+      "variety": "RCH-659 (Bt-II)",
+      "area_acres": 8,
+      "location": "Sector 4 (Southern Valley)",
+      "soil_type": "Deep Black Regur",
+      "growth_stage": "Boll Formation",
+      "health_score": 54,
+      "disease_risk": "MODERATE",
+      "pest_risk": "CRITICAL",
+      "last_inspection": "2026-08-09",
+      "active_alerts": 2,
+      "recommended_action": "Pheromone trap count exceeded 11 moths/night. Release Trichogramma wasps and inspect green bolls for rosette flowers."
+    }
+  ],
+  "detections": [
+    {
+      "id": "DET-2026-0810-01",
+      "timestamp": "2026-08-10 10:15 AM",
+      "crop": "Rice (Paddy)",
+      "category": "Disease",
+      "name": "Rice Blast",
+      "confidence": 0.94,
+      "severity": "Critical",
+      "severity_pct": 78,
+      "risk_level": "CRITICAL",
+      "symptoms": [
+        "Elliptical spindle-shaped lesions with grayish center and dark reddish-brown margins",
+        "Coalescing spots causing leaf blade blighting",
+        "Rotting observed at node junctions"
+      ],
+      "possible_causes": [
+        "Relative humidity sustained >90% during tillering stage",
+        "Overuse of chemical urea nitrogen without balanced potassium",
+        "Microclimate fogging in high-density planted field"
+      ],
+      "management_immediate": "Drain standing water for 48 hours to reduce canopy humidity. Stop all urea nitrogen top-dressing immediately.",
+      "management_preventive": "Adopt 20x15 cm seedling spacing and use blast-resistant seeds in future planting.",
+      "management_biological": "Apply foliar spray of Pseudomonas fluorescens (0.2%) or Trichoderma viride culture early morning.",
+      "management_ipm": "Prophylactic Tricyclazole 75 WP (0.6 g/L) only if lesions expand beyond 5% leaf area, adhering to regional safety norms.",
+      "xai_factors": [
+        {
+          "factor": "Relative Humidity",
+          "category": "Environmental",
+          "contribution_pct": 34,
+          "value_observed": "92%",
+          "threshold": ">85% Critical",
+          "direction": "Increases Risk",
+          "description": "Atmospheric moisture exceeds fungal spore germination threshold by 7%."
+        },
+        {
+          "factor": "Extended Leaf Wetness",
+          "category": "Environmental",
+          "contribution_pct": 28,
+          "value_observed": "13.5 hours/day",
+          "threshold": ">10 hours Danger",
+          "direction": "Increases Risk",
+          "description": "Persistent dew coating accelerates fungal germ tube penetration into leaf stomata."
+        },
+        {
+          "factor": "Growth Stage Vulnerability",
+          "category": "Crop",
+          "contribution_pct": 18,
+          "value_observed": "Tillering Stage",
+          "threshold": "High Tissue Tenderness",
+          "direction": "Increases Risk",
+          "description": "Juvenile tender foliage provides ideal soft substrate for blast infection."
+        },
+        {
+          "factor": "Soil Moisture & Stagnation",
+          "category": "Field Condition",
+          "contribution_pct": 12,
+          "value_observed": "82%",
+          "threshold": ">75% Excessive",
+          "direction": "Increases Risk",
+          "description": "Waterlogged root zone limits systemic silica uptake needed for leaf cell wall rigidity."
+        },
+        {
+          "factor": "Ambient Temperature",
+          "category": "Environmental",
+          "contribution_pct": 8,
+          "value_observed": "27.8°C",
+          "threshold": "24°C - 28°C Optimal",
+          "direction": "Increases Risk",
+          "description": "Temperature is within the peak fungal metabolic multiplication range."
+        }
+      ],
+      "counterfactual_tip": "If relative humidity drops to 70% and stagnant water is drained, blast reproduction slows by ~62%."
+    },
+    {
+      "id": "DET-2026-0814-02",
+      "timestamp": "2026-08-14 02:45 PM",
+      "crop": "Tomato",
+      "category": "Disease",
+      "name": "Tomato Early Blight",
+      "confidence": 0.92,
+      "severity": "High",
+      "severity_pct": 64,
+      "risk_level": "HIGH",
+      "symptoms": [
+        "Concentric target-board ring pattern on lower older foliage",
+        "Chlorotic bright yellow halo encircling necrotic spots",
+        "Defoliation of bottom leaves exposing fruit to sunscald"
+      ],
+      "possible_causes": [
+        "Soil splash carrying Alternaria solani fungal spores onto lower canopy",
+        "Heavy intermittent monsoon showers followed by warm afternoon sun",
+        "Lack of ground mulch allowing direct raindrop splatter"
+      ],
+      "management_immediate": "Prune and safely burn or bury all diseased lower leaves up to 30cm height. Disinfect pruning shears between plants.",
+      "management_preventive": "Lay organic straw or silver reflective mulch to physically prevent soil splashing.",
+      "management_biological": "Spray neem seed kernel extract (NSKE 5%) or 1% Bordeaux mixture to protect healthy upper foliage.",
+      "management_ipm": "Targeted Mancozeb 75 WP (2 g/L) protective barrier spray following authorized plant clinic guidelines.",
+      "xai_factors": [
+        {
+          "factor": "Soil Splash / Rainfall Splatter",
+          "category": "Environmental",
+          "contribution_pct": 32,
+          "value_observed": "18 mm in 24h",
+          "threshold": ">10 mm splash risk",
+          "direction": "Increases Risk",
+          "description": "Splash mechanics propelled dormant soil fungal inoculum onto basal leaves."
+        },
+        {
+          "factor": "Ambient Temperature",
+          "category": "Environmental",
+          "contribution_pct": 25,
+          "value_observed": "26.8°C",
+          "threshold": "24°C - 30°C Optimal",
+          "direction": "Increases Risk",
+          "description": "Warm daytime temperatures accelerate Alternaria conidial reproduction."
+        },
+        {
+          "factor": "Canopy Density & Shading",
+          "category": "Field Condition",
+          "contribution_pct": 20,
+          "value_observed": "Dense Unpruned",
+          "threshold": "Open Airy Canopy",
+          "direction": "Increases Risk",
+          "description": "Poor lower canopy air circulation delayed foliage drying after rain."
+        },
+        {
+          "factor": "Crop Phenology",
+          "category": "Crop",
+          "contribution_pct": 15,
+          "value_observed": "Fruiting Stage",
+          "threshold": "Nutrient Diverting Stage",
+          "direction": "Increases Risk",
+          "description": "Plant directs energy to fruits, decreasing natural phytoalexin defense in older leaves."
+        },
+        {
+          "factor": "Soil Potassium Level",
+          "category": "Field Condition",
+          "contribution_pct": 8,
+          "value_observed": "Medium",
+          "threshold": "High",
+          "direction": "Neutral",
+          "description": "Adequate potassium maintains partial epidermal resistance."
+        }
+      ],
+      "counterfactual_tip": "Pruning bottom leaves and laying straw mulch reduces spore transmission probability by ~75%."
+    },
+    {
+      "id": "DET-2026-0818-03",
+      "timestamp": "2026-08-18 11:30 AM",
+      "crop": "Cotton",
+      "category": "Pest",
+      "name": "Pink Bollworm",
+      "confidence": 0.95,
+      "severity": "Critical",
+      "severity_pct": 82,
+      "risk_level": "CRITICAL",
+      "symptoms": [
+        "Rosetted flower blooms failing to open properly",
+        "Small entry holes sealed with microscopic webbing on green bolls",
+        "Burrowing larvae feeding on immature seeds and lint inside boll segments"
+      ],
+      "possible_causes": [
+        "High nocturnal moth flight coinciding with peak boll formation stage",
+        "Survival of diapausing pupae from previous season crop residues",
+        "Delayed pest detection due to internal larval feeding habit"
+      ],
+      "management_immediate": "Install 8 pheromone traps per acre immediately to monitor flight intensity. Remove and destroy rosetted flowers.",
+      "management_preventive": "Shred and bury all cotton stalks promptly post-harvest to break the diapausing overwintering cycle.",
+      "management_biological": "Release egg parasitoid wasps Trichogramma bactrae @ 60,000/ha weekly for 4 weeks.",
+      "management_ipm": "Time selective biorational insecticide sprays strictly within 48-72 hours of peak pheromone trap moth flushes.",
+      "xai_factors": [
+        {
+          "factor": "Pheromone Trap Count",
+          "category": "Historical",
+          "contribution_pct": 38,
+          "value_observed": "12 moths/trap/night",
+          "threshold": ">8 ETL Critical",
+          "direction": "Increases Risk",
+          "description": "Trap count exceeds the Economic Threshold Level for 3 consecutive days."
+        },
+        {
+          "factor": "Crop Growth Stage",
+          "category": "Crop",
+          "contribution_pct": 26,
+          "value_observed": "Boll Formation",
+          "threshold": "Peak Vulnerability",
+          "direction": "Increases Risk",
+          "description": "Tender green bolls provide high-protein seed food required by growing larvae."
+        },
+        {
+          "factor": "Nighttime Temperature",
+          "category": "Environmental",
+          "contribution_pct": 18,
+          "value_observed": "24.5°C",
+          "threshold": "22°C - 28°C Flight range",
+          "direction": "Increases Risk",
+          "description": "Warm calm nights stimulate high mating and oviposition activity by female moths."
+        },
+        {
+          "factor": "Previous Crop Residue",
+          "category": "Historical",
+          "contribution_pct": 12,
+          "value_observed": "Near unploughed field",
+          "threshold": "Sanitized Clean",
+          "direction": "Increases Risk",
+          "description": "Neighboring untreated residue acted as a reservoir for pupal emergence."
+        },
+        {
+          "factor": "Parasitoid Activity",
+          "category": "Field Condition",
+          "contribution_pct": 6,
+          "value_observed": "Low Native Wasp Density",
+          "threshold": "High",
+          "direction": "Increases Risk",
+          "description": "Insufficient natural bio-predators allowed unrestrained larval hatching."
+        }
+      ],
+      "counterfactual_tip": "Deploying pheromone mating disruption and releasing Trichogramma wasps cuts boll infestation by ~68%."
+    }
+  ],
+  "radarReports": [
+    {
+      "id": "REP-101",
+      "village": "Sector 1 (North Farms)",
+      "pest": "Pink Bollworm",
+      "severity": "high",
+      "timestamp": "2026-09-15T15:01:24.641Z",
+      "reportedBy": "Farmer (Plot 42/B)",
+      "notes": "Rosette flowers observed, 12% boll infestation detected"
+    },
+    {
+      "id": "REP-102",
+      "village": "Sector 2 (Central Plains)",
+      "pest": "Soybean Stem Borer",
+      "severity": "med",
+      "timestamp": "2026-09-15T09:01:24.642Z",
+      "reportedBy": "Kailash Farmer",
+      "notes": "Wilting of top leaves on JS 335 soybean"
+    },
+    {
+      "id": "REP-103",
+      "village": "Sector 3 (Eastern Belt)",
+      "pest": "Citrus Gummosis",
+      "severity": "med",
+      "timestamp": "2026-09-15T03:01:24.642Z",
+      "reportedBy": "Vikas Farmer",
+      "notes": "Gum exudation on sweet orange bark after humid spell"
+    }
+  ],
+  "subscribers": [
+    {
+      "id": "SUB-2417",
+      "phone": "9822123456",
+      "district": "Agricultural Zone A",
+      "subscribedAt": "2026-09-15T17:01:42.417Z",
+      "alertTypes": [
+        "pest_spore",
+        "weather",
+        "gov_advisory"
+      ]
+    },
+    {
+      "id": "SUB-1",
+      "phone": "9822001122",
+      "district": "Agricultural Zone B",
+      "subscribedAt": "2026-09-10T17:01:24.642Z",
+      "alertTypes": [
+        "pest_spore",
+        "weather",
+        "gov_advisory"
+      ]
+    },
+    {
+      "id": "SUB-2",
+      "phone": "9420112233",
+      "district": "Agricultural Zone C",
+      "subscribedAt": "2026-09-13T17:01:24.642Z",
+      "alertTypes": [
+        "pest_spore",
+        "gov_advisory"
+      ]
+    }
+  ],
+  "inspections": [
+    {
+      "id": "INSP-8821",
+      "officerName": "Dr. Gajanan Deshmukh",
+      "crop": "Cotton (BT)",
+      "farmerName": "Ramesh Patil",
+      "village": "Sector 1 (North Farms)",
+      "preferredDate": "2024-09-22",
+      "status": "Confirmed",
+      "bookedAt": "2026-09-15T13:01:24.642Z"
+    }
+  ],
+  "logbook": [
+    {
+      "id": "LOG-MH-4403",
+      "timestamp": "2026-09-15T17:01:44.403Z",
+      "crop": "Cotton",
+      "issue": "Pink Bollworm",
+      "severity": "Moderate",
+      "actionTaken": "Neem Oil 10,000 ppm",
+      "treatmentType": "organic",
+      "cibrcCertified": true
+    },
+    {
+      "id": "LOG-MH-8829",
+      "timestamp": "2026-09-15T12:01:24.642Z",
+      "crop": "Cotton (Bollgard II)",
+      "issue": "Pink Bollworm (Stage 2 - Moderate)",
+      "severity": "Moderate",
+      "actionTaken": "Applied Neem Oil 10,000 PPM (5 ml/L) & installed 5 pheromone traps",
+      "treatmentType": "organic",
+      "cibrcCertified": true
+    },
+    {
+      "id": "LOG-MH-8714",
+      "timestamp": "2026-09-09T17:01:24.642Z",
+      "crop": "Soybean (JS 335)",
+      "issue": "Early Foliar Rust (Phakopsora pachyrhizi)",
+      "severity": "Mild",
+      "actionTaken": "Prophylactic spray of Hexaconazole 5% EC at 2 ml/L",
+      "treatmentType": "chemical",
+      "cibrcCertified": true
+    }
+  ]
+}

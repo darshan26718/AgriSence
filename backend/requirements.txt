@@ -1,0 +1,9 @@
+# AgriSense Python Agricultural Backend
+# The server is built using the Python 3.8+ standard library (http.server, json, urllib, csv)
+# and runs with zero external pip dependencies required out-of-the-box.
+#
+# Optional production ASGI/WSGI dependencies if deploying on Gunicorn / Uvicorn / FastAPI:
+# uvicorn>=0.28.0
+# fastapi>=0.110.0
+# pydantic>=2.6.0
+# gunicorn>=21.2.0

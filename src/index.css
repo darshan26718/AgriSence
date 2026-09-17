@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Premium Clean AgriTech Palette */
+  --color-primary: #15803d; /* Forest Green */
+  --color-primary-hover: #166534;
+  --color-primary-light: #dcfce7;
+  --color-secondary: #22c55e; /* Natural Green */
+  --color-secondary-light: #f0fdf4;
+  
+  --color-background: #f8faf8; /* Warm / Off White */
+  --color-surface: #ffffff; /* Crisp Pure White Cards */
+  --color-surface-subtle: #f1f5f2;
+  
+  --color-text-main: #0f172a; /* Dark Charcoal */
+  --color-text-muted: #64748b; /* Slate Gray */
+  --color-text-subtle: #94a3b8;
+  
+  --color-border: #e2e8f0;
+  --color-border-subtle: #f1f5f9;
+  
+  --color-warning: #ea580c; /* Orange */
+  --color-warning-light: #fff7ed;
+  --color-critical: #dc2626; /* Red */
+  --color-critical-light: #fef2f2;
+  --color-info: #2563eb; /* Blue */
+  --color-info-light: #eff6ff;
+
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 1rem;
+  --spacing-space-lg: 1.5rem;
+  --spacing-space-xl: 2rem;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-background);
+  color: var(--color-text-main);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Clean Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* AI Laser Scanning Animation */
+@keyframes aiScanLaser {
+  0% {
+    top: 4%;
+    opacity: 0.8;
+  }
+  50% {
+    top: 94%;
+    opacity: 1;
+  }
+  100% {
+    top: 4%;
+    opacity: 0.8;
+  }
+}
+
+.animate-scan-laser {
+  animation: aiScanLaser 2.6s ease-in-out infinite;
+}
+
+/* Fade In */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+/* Pulse Glow */
+@keyframes pulseSubtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 2s infinite ease-in-out;
+}

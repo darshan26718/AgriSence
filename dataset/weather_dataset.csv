@@ -1,0 +1,27 @@
+date,region,avg_temperature_c,relative_humidity_pct,rainfall_mm,leaf_wetness_hours,wind_speed_kmh,primary_infestation_risk,favored_pathogen_pest,forecast_alert_level
+2026-08-01,Zone 1 - Northern Plains,29.8,76,8.5,7.2,12.0,Fungal Foliar Risk,Yellow Rust & Leaf Spot,MODERATE
+2026-08-05,Zone 1 - Northern Plains,31.2,85,18.0,9.5,8.4,High Blast & Sucking Pest,Rice Blast & Aphids,HIGH
+2026-08-10,Zone 1 - Northern Plains,28.4,94,32.0,14.0,5.2,Severe Waterlogging & Blight,Rice Blast & Sheath Blight,CRITICAL
+2026-08-15,Zone 1 - Northern Plains,27.5,91,24.5,12.8,6.8,Continuous Moisture Epidemic,Bacterial Leaf Blight,CRITICAL
+2026-08-20,Zone 1 - Northern Plains,30.0,82,6.0,8.0,10.5,Stem Borer Emergence,Stem Borer & Leaf Roller,HIGH
+2026-08-25,Zone 1 - Northern Plains,31.5,74,1.5,5.5,13.2,Mite & Thrips Growth,Thrips & Whiteflies,MODERATE
+2026-08-01,Zone 2 - Central Plains,31.0,68,4.0,5.5,14.2,Sucking Pest Infestation,Thrips & Whiteflies,MODERATE
+2026-08-06,Zone 2 - Central Plains,32.5,62,0.0,3.8,16.0,Thermal Stress & Bollworm,Pink Bollworm & Thrips,HIGH
+2026-08-12,Zone 2 - Central Plains,27.0,88,19.5,11.5,9.0,Early Blight & Foliar Mold,Tomato Early Blight & Rust,HIGH
+2026-08-18,Zone 2 - Central Plains,26.2,93,28.0,13.2,7.5,Downy & Late Blight Outbreak,Late Blight & Anthracnose,CRITICAL
+2026-08-24,Zone 2 - Central Plains,28.5,78,5.0,7.0,11.0,Fruit Borer Activity,Fruit Borer & Pod Fly,MODERATE
+2026-08-29,Zone 2 - Central Plains,29.8,75,8.0,6.5,10.0,Soybean Pod Blight Inoculum,Soybean Anthracnose & Rust,HIGH
+2026-08-02,Zone 3 - Eastern River Basin,31.8,82,12.0,8.5,13.0,Brown Planthopper Spike,Brown Planthopper,HIGH
+2026-08-08,Zone 3 - Eastern River Basin,32.4,87,15.5,10.0,10.2,Hopperburn Threat,BPH & Bacterial Leaf Streak,CRITICAL
+2026-08-14,Zone 3 - Eastern River Basin,29.5,92,26.0,13.5,8.0,Fungal Sheath Rot,Sheath Rot & Blast,CRITICAL
+2026-08-20,Zone 3 - Eastern River Basin,30.8,80,7.0,7.5,12.4,Fall Armyworm in Late Crops,Fall Armyworm,HIGH
+2026-08-26,Zone 3 - Eastern River Basin,28.9,89,19.0,11.0,9.0,Bacterial Blight Expansion,Bacterial Leaf Blight,HIGH
+2026-08-03,Zone 4 - Southern Valley,27.2,79,9.0,7.8,11.5,Solanaceous Foliar Risk,Tomato Early Blight,MODERATE
+2026-08-09,Zone 4 - Southern Valley,25.8,89,17.2,11.0,9.0,Late Blight & Whitefly Wave,Late Blight & Whitefly,HIGH
+2026-08-16,Zone 4 - Southern Valley,24.9,94,31.0,14.5,7.0,Severe Late Blight Risk,Potato & Tomato Late Blight,CRITICAL
+2026-08-22,Zone 4 - Southern Valley,28.0,75,3.0,6.0,13.0,Mite & Thrips Recurrence,Thrips & Red Spider Mites,MODERATE
+2026-08-28,Zone 4 - Southern Valley,29.5,82,11.0,8.2,10.0,Chili Dieback Inoculum,Chili Anthracnose & Dieback,HIGH
+2026-08-04,Zone 5 - Western Semi-Arid Belt,32.5,60,0.0,3.0,16.5,Dry Heat & Sucking Pest Wave,Thrips & Aphids,MODERATE
+2026-08-10,Zone 5 - Western Semi-Arid Belt,33.8,55,0.0,2.5,18.0,Severe Moisture Deficit & Mites,Red Spider Mite & Whitefly,HIGH
+2026-08-17,Zone 5 - Western Semi-Arid Belt,28.0,85,16.0,9.5,11.0,Groundnut Tikka Leaf Spot Flare,Tikka Leaf Spot & Rust,HIGH
+2026-08-23,Zone 5 - Western Semi-Arid Belt,29.2,78,6.5,7.0,10.5,Caterpillar Egg Hatching,Spodoptera Cutworm,MODERATE

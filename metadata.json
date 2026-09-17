@@ -1,0 +1,6 @@
+{
+  "name": "AgriSense - Smart Crop & Pest Advisory",
+  "description": "Universal agricultural intelligence platform for all farmers: instant crop disease diagnosis, CIBRC certified dosage advisory, AI scanner, and community outbreak radar.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
