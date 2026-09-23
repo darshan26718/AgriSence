@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ScanSearch,
   MapPin,
@@ -29,6 +29,7 @@ import { FieldRecord } from '../../types/agri';
 import { PushNotificationAlert } from '../../types/notification';
 import { AppLanguage, getLocale } from '../../locales';
 import { AiVoiceSpeakerButton } from '../speech/AiVoiceSpeakerButton';
+import { FarmerAppMode } from '../farmer/FarmerAppMode';
 
 interface ModernDashboardViewProps {
   fields: FieldRecord[];
@@ -38,6 +39,10 @@ interface ModernDashboardViewProps {
   onNavigateToAgroCentres?: () => void;
   onNavigateToAdvisory: (crop?: string) => void;
   onNavigateToEarlyWarning?: () => void;
+  onNavigateToVoice?: () => void;
+  onNavigateToIrrigation?: () => void;
+  onNavigateToDoctors?: () => void;
+  onSelectLanguage?: (lang: AppLanguage) => void;
   onViewFieldDetails: (field: FieldRecord) => void;
   activeAlerts: PushNotificationAlert[];
   onDismissAlert: (id: string) => void;
@@ -52,11 +57,49 @@ export const ModernDashboardView: React.FC<ModernDashboardViewProps> = ({
   onNavigateToAgroCentres,
   onNavigateToAdvisory,
   onNavigateToEarlyWarning,
+  onNavigateToVoice,
+  onNavigateToIrrigation,
+  onNavigateToDoctors,
+  onSelectLanguage,
   onViewFieldDetails,
   activeAlerts = [],
   onDismissAlert,
   language = 'en',
 }) => {
+  const [viewMode, setViewMode] = useState<'farmer' | 'advanced'>(() => {
+    try {
+      const saved = localStorage.getItem('agrisense_view_mode');
+      if (saved === 'farmer' || saved === 'advanced') return saved;
+    } catch {}
+    return 'farmer'; // Default to Farmer Mode so farmers instantly understand the app
+  });
+
+  const toggleViewMode = (mode: 'farmer' | 'advanced') => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('agrisense_view_mode', mode);
+    } catch {}
+  };
+
+  if (viewMode === 'farmer') {
+    return (
+      <FarmerAppMode
+        language={language}
+        onSelectLanguage={onSelectLanguage || (() => {})}
+        onNavigateToScan={onNavigateToScan}
+        onNavigateToVoice={onNavigateToVoice || (() => onNavigateToAdvisory())}
+        onNavigateToWeather={onNavigateToWeather || (() => {})}
+        onNavigateToIrrigation={onNavigateToIrrigation || onNavigateToWeather || (() => {})}
+        onNavigateToAdvisory={onNavigateToAdvisory}
+        onNavigateToDoctors={onNavigateToDoctors || onNavigateToAgroCentres || (() => {})}
+        onNavigateToEarlyWarning={onNavigateToEarlyWarning || (() => {})}
+        onSwitchToAdvancedMode={() => toggleViewMode('advanced')}
+        fields={fields}
+        activeAlerts={activeAlerts}
+      />
+    );
+  }
+
   const t = getLocale(language).dashboard;
   const common = getLocale(language).common;
 
@@ -89,6 +132,29 @@ export const ModernDashboardView: React.FC<ModernDashboardViewProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
+      {/* Top Banner to switch back to Farmer App View */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 sm:p-4 rounded-3xl bg-emerald-50 border border-emerald-200/80 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-700 text-white flex items-center justify-center text-lg flex-shrink-0">
+            🚜
+          </div>
+          <div>
+            <span className="text-xs sm:text-sm font-bold text-emerald-950 block">
+              सरल किसान ऐप मोड उपलब्ध है (Farmer-Friendly App Mode)
+            </span>
+            <span className="text-[11px] sm:text-xs text-emerald-700">
+              आवाज सहायता, बड़े फोटो स्कैन बटन और सीधी किसान भाषा
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={() => toggleViewMode('farmer')}
+          className="w-full sm:w-auto px-4 py-2 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-all cursor-pointer whitespace-nowrap"
+        >
+          📱 किसान ऐप दृश्य में बदलें
+        </button>
+      </div>
+
       {/* Critical Alert Bar */}
       {topCriticalAlert && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-orange-50 border border-orange-200 text-slate-800 shadow-xs">

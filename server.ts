@@ -17,8 +17,8 @@ import { AgriculturalAIEngine } from './src/services/aiEngine';
 import { FieldRecord, DetectionResult } from './src/types/agri';
 
 const app = express();
-const PORT = 3000;
-const PYTHON_PORT = 5055;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PYTHON_PORT = process.env.PYTHON_PORT ? parseInt(process.env.PYTHON_PORT, 10) : 5055;
 
 // ----------------------------------------------------
 // PYTHON BACKEND PROCESS SUPERVISOR

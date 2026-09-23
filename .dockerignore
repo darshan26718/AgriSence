@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.vite
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env*
+.pytest_cache

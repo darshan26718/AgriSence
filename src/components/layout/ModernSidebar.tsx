@@ -32,6 +32,7 @@ export type ModernNavTab =
   | 'agro-centres'
   | 'agri-experts'
   | 'advisory'
+  | 'irrigation'
   | 'reports'
   | 'community'
   | 'settings'

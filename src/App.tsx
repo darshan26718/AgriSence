@@ -344,6 +344,10 @@ export default function App() {
               handleTabSelect('advisory');
             }}
             onNavigateToEarlyWarning={() => handleTabSelect('early-warning')}
+            onNavigateToVoice={() => setIsVoiceModalOpen(true)}
+            onNavigateToIrrigation={() => handleTabSelect('irrigation')}
+            onNavigateToDoctors={() => handleTabSelect('agri-experts')}
+            onSelectLanguage={handleLanguageChange}
             onViewFieldDetails={() => handleTabSelect('fields')}
             activeAlerts={activeAlerts}
             onDismissAlert={id => setActiveAlerts(prev => prev.filter(a => a.id !== id))}
@@ -451,6 +455,10 @@ export default function App() {
             onNavigateToAgroCentres={() => handleTabSelect('agro-centres')}
             onNavigateToAdvisory={() => handleTabSelect('advisory')}
             onNavigateToEarlyWarning={() => handleTabSelect('early-warning')}
+            onNavigateToVoice={() => setIsVoiceModalOpen(true)}
+            onNavigateToIrrigation={() => handleTabSelect('irrigation')}
+            onNavigateToDoctors={() => handleTabSelect('agri-experts')}
+            onSelectLanguage={handleLanguageChange}
             onViewFieldDetails={() => handleTabSelect('fields')}
             activeAlerts={activeAlerts}
             onDismissAlert={id => setActiveAlerts(prev => prev.filter(a => a.id !== id))}
