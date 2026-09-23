@@ -1,0 +1,64 @@
+{
+  "status": "PASSED",
+  "dataset_file": "C:\\Users\\acer\\Downloads\\agrisense\\dataset\\agrisense_training_dataset.csv",
+  "total_records": 10000,
+  "unique_records": 10000,
+  "duplicate_count": 0,
+  "missing_values_by_column": {},
+  "invalid_numeric_anomalies_count": 0,
+  "invalid_crop_disease_combinations": 0,
+  "invalid_crop_pest_combinations": 0,
+  "invalid_risk_score_count": 0,
+  "invalid_probability_count": 0,
+  "class_distributions": {
+    "risk_level": {
+      "LOW": 2821,
+      "CRITICAL": 1343,
+      "MEDIUM": 2920,
+      "HIGH": 2916
+    },
+    "severity": {
+      "LOW": 4299,
+      "HIGH": 3059,
+      "MEDIUM": 2642
+    },
+    "top_diseases": {
+      "None": 2070,
+      "Cotton Leaf Curl Virus": 779,
+      "Rice Blast": 732,
+      "Bacterial Leaf Blight": 719,
+      "Wheat Brown Rust": 533,
+      "Potato Black Scurf": 436,
+      "Chickpea Fusarium Wilt": 394,
+      "Wheat Yellow Rust": 393
+    },
+    "top_pests": {
+      "None": 8074,
+      "Aphids": 272,
+      "Thrips": 231,
+      "Whiteflies": 179,
+      "Termites": 156,
+      "Pink Bollworm": 143,
+      "Brown Planthopper": 136,
+      "Yellow Stem Borer": 135
+    },
+    "crops": {
+      "Rice": 2027,
+      "Cotton": 1325,
+      "Maize": 693,
+      "Potato": 833,
+      "Wheat": 1545,
+      "Tomato": 758,
+      "Chili": 220,
+      "Groundnut": 628,
+      "Sugarcane": 506,
+      "Soybean": 650,
+      "Onion": 165,
+      "Pigeon Pea": 211,
+      "Citrus": 43,
+      "Chickpea": 285,
+      "Banana": 111
+    }
+  },
+  "synthetic_data_identified": true
+}

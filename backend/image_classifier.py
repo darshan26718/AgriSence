@@ -31,9 +31,12 @@ import base64
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple, Optional
 
+from urllib.parse import unquote as url_unquote
+from urllib.request import urlopen as url_open, Request as url_Request
+
 # Try importing Pillow
 try:
-    from PIL import Image, ImageStat, ImageFilter
+    from PIL import Image, ImageStat, ImageFilter, ImageOps
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
@@ -44,6 +47,9 @@ MODELS_DIR = os.path.join(WORKSPACE_ROOT, "backend", "models")
 DISEASE_MODEL_V1_PATH = os.path.join(WORKSPACE_ROOT, "data", "disease_classifier_model.json")
 DISEASE_MODEL_V2_PATH = os.path.join(WORKSPACE_ROOT, "data", "disease_classifier_model_v2.json")
 MODEL_REGISTRY_PATH = os.path.join(WORKSPACE_ROOT, "data", "model_registry.json")
+
+# Configurable image confidence threshold per Section 19
+IMAGE_CONFIDENCE_THRESHOLD = float(os.environ.get("IMAGE_CONFIDENCE_THRESHOLD", 0.70))
 
 # Try importing the trained ML model loader
 try:
@@ -213,26 +219,99 @@ class ImageClassifier:
 
     @classmethod
     def decode_image(cls, image_input: Any) -> Tuple[Optional[Any], Optional[str]]:
-        """Decodes raw bytes, base64 string, or data URL into a PIL Image."""
-        if not PILLOW_AVAILABLE:
+        """Decodes raw bytes, base64 string, data URL, local path, or image URL into a PIL Image."""
+        try:
+            from PIL import Image, ImageOps
+        except ImportError:
             return None, "Pillow library is not installed."
 
         try:
+            if isinstance(image_input, dict):
+                image_input = image_input.get("image") or image_input.get("image_data") or image_input.get("data")
+
             if isinstance(image_input, bytes):
                 img = Image.open(io.BytesIO(image_input))
-                img.verify()
-                img = Image.open(io.BytesIO(image_input))
+                try:
+                    img = ImageOps.exif_transpose(img)
+                except Exception:
+                    pass
                 return img.convert("RGB"), None
 
             if isinstance(image_input, str):
+                image_input = image_input.strip().strip('"\'')
+                if not image_input:
+                    return None, "Empty image input string."
+
+                # Handle HTTP/HTTPS URL
+                if image_input.startswith(("http://", "https://")):
+                    req = url_Request(image_input, headers={"User-Agent": "AgriSense/1.0"})
+                    with url_open(req, timeout=8) as resp:
+                        raw_bytes = resp.read()
+                        img = Image.open(io.BytesIO(raw_bytes))
+                        try:
+                            img = ImageOps.exif_transpose(img)
+                        except Exception:
+                            pass
+                        return img.convert("RGB"), None
+
+                # Handle local file path
+                if os.path.isfile(image_input):
+                    img = Image.open(image_input)
+                    try:
+                        img = ImageOps.exif_transpose(img)
+                    except Exception:
+                        pass
+                    return img.convert("RGB"), None
+
                 # Handle base64 data URL e.g. "data:image/jpeg;base64,/9j/4AAQ..."
-                if "," in image_input:
+                if "," in image_input and ("data:" in image_input or ";base64" in image_input):
                     image_input = image_input.split(",", 1)[1]
-                raw_bytes = base64.b64decode(image_input)
+
+                # Clean URL-encoding if present
+                if "%" in image_input:
+                    image_input = url_unquote(image_input)
+
+                # Remove all whitespace and newlines
+                cleaned = "".join(image_input.split())
+
+                # Add missing base64 padding
+                pad = len(cleaned) % 4
+                if pad != 0:
+                    cleaned += "=" * (4 - pad)
+
+                raw_bytes = None
+                try:
+                    raw_bytes = base64.b64decode(cleaned)
+                except Exception:
+                    try:
+                        raw_bytes = base64.urlsafe_b64decode(cleaned)
+                    except Exception:
+                        if " " in image_input:
+                            try:
+                                raw_bytes = base64.b64decode("".join(image_input.replace(" ", "+").split()))
+                            except Exception:
+                                pass
+
+                if raw_bytes is None:
+                    return None, "Failed to decode base64 image data."
+
                 img = Image.open(io.BytesIO(raw_bytes))
-                img.verify()
-                img = Image.open(io.BytesIO(raw_bytes))
-                return img.convert("RGB"), None
+                try:
+                    img = ImageOps.exif_transpose(img)
+                except Exception:
+                    pass
+
+                # Handle alpha transparency by blending onto neutral background
+                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                    bg = Image.new("RGB", img.size, (255, 255, 255))
+                    alpha = img.convert("RGBA").split()[-1]
+                    bg.paste(img.convert("RGB"), mask=alpha)
+                    img = bg
+                else:
+                    img = img.convert("RGB")
+
+                img.load()
+                return img, None
 
             return None, "Unsupported image data format."
         except Exception as e:
@@ -408,11 +487,12 @@ class ImageClassifier:
         return detected_crop, crop_match, match_confidence, linear_ratio
 
     @classmethod
-    def extract_visual_pathology(cls, img: Any) -> Dict[str, float]:
+    def extract_visual_pathology(cls, img: Any) -> Dict[str, Any]:
         """
         Extracts genuine visual pathology indicators:
         - chlorosis_ratio, necrosis_ratio, spot_density, concentric_ring_score,
-          water_soaked_score, powdery_score, healthy_green_ratio
+          water_soaked_score, powdery_score, healthy_green_ratio, spot_count
+        Uses HSV chromaticity, luminance, and connected-component lesion clustering.
         """
         if not PILLOW_AVAILABLE or img is None:
             return {
@@ -423,84 +503,106 @@ class ImageClassifier:
                 "water_soaked_score": 0.10,
                 "powdery_score": 0.02,
                 "healthy_green_ratio": 0.40,
+                "spot_count": 0,
             }
 
-        thumb = img.resize((150, 150))
-        pixels = safe_get_pixels(thumb)
-        n = len(pixels)
+        thumb = img.resize((120, 120))
+        w, h = thumb.size
+        hsv = thumb.convert("HSV")
+
+        rgb_pixels = safe_get_pixels(thumb)
+        hsv_pixels = safe_get_pixels(hsv)
+        n = len(rgb_pixels)
 
         chlorosis_count = 0
         necrosis_count = 0
         water_soaked_count = 0
         powdery_count = 0
         healthy_green_count = 0
+        spot_mask = [0] * n
 
-        for r, g, b in pixels:
-            if g > r * 1.1 and g > b * 1.15 and g > 50:
-                healthy_green_count += 1
-            elif r > 130 and g > 130 and b < 95 and abs(r - g) < 40:
-                chlorosis_count += 1
-            elif r > 45 and g > 30 and b < 45 and r > g and (r + g + b) < 220:
+        for i, ((r, g, b), (hv, s, v)) in enumerate(zip(rgb_pixels, hsv_pixels)):
+            # Filter background white/glare or pitch-black non-foliar pixels
+            if (v > 248 and s < 22) or v < 15:
+                continue
+
+            # 1. Necrotic Lesions (Brown, rust, tan spots, dark brown edges, black pinheads)
+            is_brown_spot = ((hv < 28 or hv > 235) and s >= 18 and 18 <= v <= 215 and r >= g * 0.85)
+            is_dark_necrosis = (v < 75 and (r > g or r > b or g < 65) and (r + g + b) > 30)
+            is_tan_lesion = (r > 65 and g > 40 and b < min(r, g) * 0.88 and (r - b) > 18 and (r + g) > 2.1 * b)
+            is_necrotic = is_brown_spot or is_dark_necrosis or is_tan_lesion
+
+            # 2. Chlorosis (Yellowish halo encircling lesions or diffuse chlorotic yellowing)
+            is_chlorotic = (24 <= hv <= 54 and s >= 24 and v >= 40 and not is_necrotic)
+
+            # 3. Water-soaked decay / softening
+            is_water_soaked = (v < 70 and g > r and g > b and s < 60 and 35 < (r + g + b) < 160 and not is_necrotic)
+
+            # 4. Powdery mildew / mycelium
+            is_powdery = (min(r, g, b) > 165 and max(r, g, b) - min(r, g, b) < 30 and s < 30 and not is_necrotic)
+
+            # 5. Healthy green tissue
+            is_green = (55 <= hv <= 115 and s >= 28 and v >= 35 and not is_necrotic and not is_chlorotic)
+
+            if is_necrotic:
                 necrosis_count += 1
-            elif r < 60 and g < 65 and b < 60 and (r + g + b) > 50:
+                spot_mask[i] = 1
+            elif is_chlorotic:
+                chlorosis_count += 1
+            elif is_water_soaked:
                 water_soaked_count += 1
-            elif min(r, g, b) > 175 and max(r, g, b) - min(r, g, b) < 25:
+            elif is_powdery:
                 powdery_count += 1
+            elif is_green:
+                healthy_green_count += 1
 
-        c_ratio = chlorosis_count / n
-        n_ratio = necrosis_count / n
-        w_ratio = water_soaked_count / n
-        p_ratio = powdery_count / n
-        h_ratio = healthy_green_count / n
+        # Connected component spot blob counting (8-connectivity)
+        visited = [False] * n
+        blobs = []
+        for idx in range(n):
+            if spot_mask[idx] == 1 and not visited[idx]:
+                queue = [idx]
+                visited[idx] = True
+                size = 0
+                while queue:
+                    cur = queue.pop(0)
+                    size += 1
+                    cx, cy = cur % w, cur // w
+                    for dx in (-1, 0, 1):
+                        for dy in (-1, 0, 1):
+                            nx, ny = cx + dx, cy + dy
+                            if 0 <= nx < w and 0 <= ny < h:
+                                nidx = ny * w + nx
+                                if spot_mask[nidx] == 1 and not visited[nidx]:
+                                    visited[nidx] = True
+                                    queue.append(nidx)
+                if size >= 4:  # minimum blob size in 120x120 thumb
+                    blobs.append(size)
 
+        c_ratio = round(chlorosis_count / n, 3)
+        n_ratio = round(necrosis_count / n, 3)
+        h_ratio = round(healthy_green_count / n, 3)
+        w_ratio = round(water_soaked_count / n, 3)
+        p_ratio = round(powdery_count / n, 3)
+        spot_count = len(blobs)
+        spot_density = round(min(1.0, (n_ratio * 1.5 + c_ratio * 0.8 + min(spot_count, 25) * 0.015)), 3)
+
+        # Concentric rings / target spot detection via edge density within necrotic lesion zones
         gray = thumb.convert("L")
         edges = gray.filter(ImageFilter.FIND_EDGES)
         edge_pixels = safe_get_pixels(edges)
-        strong_edges = sum(1 for p in edge_pixels if p > 70) / n
-
-        # Check directional symmetry: circular concentric rings are isotropic,
-        # while monocot grass veins are unidirectional.
-        w, h = thumb.size
-        gray_pixels = safe_get_pixels(gray)
-        diff_v = 0
-        diff_h = 0
-        for y in range(1, h - 1):
-            for x in range(1, w - 1):
-                idx = y * w + x
-                diff_v += abs(gray_pixels[idx + w] - gray_pixels[idx - w])
-                diff_h += abs(gray_pixels[idx + 1] - gray_pixels[idx - 1])
-        axis_ratio = diff_h / (diff_v + 1e-4)
-        is_parallel_veins = axis_ratio > 1.35 or axis_ratio < 0.74
-
-        edge_coords = [(i % w, i // w) for i, p in enumerate(edge_pixels) if p > 70]
-        n_edges = len(edge_coords)
-
-        # Alternaria concentric rings form a localized focal spot with both
-        # necrosis (dark rings) and chlorosis (yellow halo).
-        is_compact_target = False
-        if n_edges > 20:
-            mx = sum(x for x, y in edge_coords) / n_edges
-            my = sum(y for x, y in edge_coords) / n_edges
-            var_x = sum((x - mx) ** 2 for x, y in edge_coords) / n_edges
-            var_y = sum((y - my) ** 2 for x, y in edge_coords) / n_edges
-            std_r = ((var_x + var_y) / 2.0) ** 0.5 / w
-            aspect = min(var_x ** 0.5, var_y ** 0.5) / (max(var_x ** 0.5, var_y ** 0.5) + 1e-4)
-            if std_r < 0.35 and aspect > 0.65:
-                is_compact_target = True
-
-        if is_compact_target and (n_ratio + c_ratio) > 0.12 and not is_parallel_veins:
-            concentric_score = min(0.40, strong_edges * 3.5)
-        else:
-            concentric_score = 0.02
+        lesion_edge_count = sum(1 for idx in range(n) if spot_mask[idx] == 1 and edge_pixels[idx] > 60)
+        ring_score = round(min(0.35, (lesion_edge_count / max(1, necrosis_count)) * 0.4 + (0.08 if spot_count > 5 else 0.0)), 3)
 
         return {
-            "chlorosis_ratio": round(c_ratio, 3),
-            "necrosis_ratio": round(n_ratio, 3),
-            "spot_density": round(min(1.0, (c_ratio + n_ratio) * 2.2), 3),
-            "concentric_ring_score": round(concentric_score, 3),
-            "water_soaked_score": round(w_ratio, 3),
-            "powdery_score": round(p_ratio, 3),
-            "healthy_green_ratio": round(h_ratio, 3),
+            "chlorosis_ratio": c_ratio,
+            "necrosis_ratio": n_ratio,
+            "spot_density": spot_density,
+            "concentric_ring_score": ring_score,
+            "water_soaked_score": w_ratio,
+            "powdery_score": p_ratio,
+            "healthy_green_ratio": h_ratio,
+            "spot_count": spot_count,
         }
 
     @classmethod
@@ -555,6 +657,11 @@ class ImageClassifier:
         ring_score = pathology["concentric_ring_score"]
         w_score = pathology["water_soaked_score"]
         p_score = pathology["powdery_score"]
+        spot_count = pathology.get("spot_count", 0)
+        spot_density = pathology.get("spot_density", (c_ratio + n_ratio) * 2.2)
+
+        # Quantifiable metric of visible disease burden: necrotic spots, chlorotic halos, lesion clusters
+        pathology_burden = n_ratio * 4.0 + c_ratio * 2.5 + spot_density * 2.0 + min(spot_count, 20) * 0.05
 
         # ── Trained ML Model Inference ──────────────────────────────────────
         trained_model = DiseaseModel.get()
@@ -562,27 +669,27 @@ class ImageClassifier:
 
         scores: List[Tuple[str, float, Dict[str, Any]]] = []
 
+        selected_clean = (selected_crop or "").lower().split("(")[0].strip()
+        is_auto = selected_clean in ("auto-detect", "auto", "unknown", "")
+
         if use_trained_model:
-            # Match 12-dimensional training feature vector
+            # Match 12-dimensional training feature vector with properly scaled features
             ml_features = [
                 c_ratio,
                 n_ratio,
-                pathology.get("spot_density", (c_ratio + n_ratio) * 2.2),
+                spot_density,
                 ring_score,
                 w_score,
                 p_score,
                 h_ratio,
                 quality.brightness,
-                quality.sharpness,
+                min(70.0, max(35.0, quality.sharpness)),
                 linear_ratio,  # Genuine crop morphology ratio
                 0.5,           # temperature_norm
                 0.7,           # humidity_norm
             ]
 
-            selected_clean = (selected_crop or "").lower().split("(")[0].strip()
-            is_auto = selected_clean in ("auto-detect", "auto", "unknown", "")
-
-            # Predict probabilities across all 27 agricultural classes
+            # Predict probabilities across all agricultural classes
             all_proba = trained_model.predict_proba([ml_features])[0]
 
             for cls_id, prob in all_proba.items():
@@ -624,7 +731,14 @@ class ImageClassifier:
 
                 boosted_score = prob * morph_weight
 
-                if pred_name == "Healthy":
+                if is_healthy:
+                    # CRITICAL BIOLOGICAL RULE:
+                    # If foliar lesions, necrosis, chlorosis, or spots are visually detected on leaf blade,
+                    # Healthy Foliage probability must be heavily suppressed!
+                    if pathology_burden > 0.08:
+                        suppression = math.exp(-min(10.0, pathology_burden * 6.0))
+                        boosted_score = boosted_score * suppression
+
                     display_crop = selected_crop if (not is_auto and crop_match) else detected_morph_crop
                     scores.append(("Healthy Foliage (No Visible Lesions)", boosted_score, {
                         "name": f"{display_crop} - Healthy",
@@ -638,6 +752,18 @@ class ImageClassifier:
                         "prevention": "Routine preventive scouting every 3-5 days; maintain optimal irrigation and field drainage.",
                     }))
                 elif kb_rec:
+                    # Symptom alignment boost for candidate disease based on genuine visual pathology
+                    symp = kb_rec.get("symptoms", "").lower()
+                    name_l = kb_rec.get("name", "").lower()
+                    if (n_ratio > 0.04 or spot_density > 0.08 or spot_count >= 2) and any(w in symp or w in name_l for w in ["spot", "blight", "canker", "lesion", "zonation", "rot", "necros"]):
+                        boosted_score += (n_ratio * 0.60 + ring_score * 0.50 + spot_density * 0.30)
+                    if (ring_score > 0.08) and any(w in symp or w in name_l for w in ["concentric", "zonation", "target", "phomopsis", "alternaria"]):
+                        boosted_score += (ring_score * 0.45)
+                    if c_ratio > 0.12 and spot_count < 2 and any(w in symp or w in name_l for w in ["yellow", "curl", "mosaic", "little leaf", "wilt"]):
+                        boosted_score += (c_ratio * 0.50)
+                    if p_score > 0.08 and any(w in symp or w in name_l for w in ["mildew", "rust", "white"]):
+                        boosted_score += (p_score * 0.60)
+
                     scores.append((kb_rec["name"], boosted_score, kb_rec))
                 else:
                     display_crop = selected_crop if (not is_auto and crop_match) else detected_morph_crop
@@ -651,9 +777,22 @@ class ImageClassifier:
                         "prevention": "Inspect field margins and remove infected foliage.",
                     }))
 
+            # Also check if user selected a crop that has diseases in KB that weren't in the 42 model classes or need scoring
+            crop_kb_diseases = cls.KB.get_for_crop(selected_clean) if not is_auto else []
+            existing_names = {s[0] for s in scores}
+            for rec in crop_kb_diseases:
+                if rec["name"] not in existing_names:
+                    symp = rec.get("symptoms", "").lower()
+                    name_l = rec.get("name", "").lower()
+                    extra_score = 0.05
+                    if (n_ratio > 0.04 or spot_density > 0.08 or spot_count >= 2) and any(w in symp or w in name_l for w in ["spot", "blight", "canker", "lesion", "zonation", "rot", "necros"]):
+                        extra_score += (n_ratio * 0.55 + ring_score * 0.45 + spot_density * 0.25)
+                    if extra_score > 0.10:
+                        scores.append((rec["name"], extra_score, rec))
+
         # ── Heuristic Fallback (when no trained model file available) ──────
         else:
-            if h_ratio > 0.70 and (c_ratio + n_ratio) < 0.05:
+            if h_ratio > 0.70 and pathology_burden < 0.08:
                 healthy_conf = min(0.92, 0.65 + h_ratio * 0.3)
                 scores.append(("Healthy Foliage (No Visible Lesions)", healthy_conf, {
                     "name": f"{detected_morph_crop} - Healthy",
@@ -667,8 +806,9 @@ class ImageClassifier:
                     "prevention": "Routine preventive scouting every 3-5 days; maintain optimal irrigation and field drainage.",
                 }))
 
-            # Evaluate across all catalogued crop diseases
-            for rec in cls.KB.diseases.values():
+            # Evaluate across catalogued crop diseases
+            candidate_pool = cls.KB.get_for_crop(selected_clean) if (not is_auto and crop_match) else list(cls.KB.diseases.values())
+            for rec in candidate_pool:
                 name_low = rec["name"].lower()
                 symp_low = rec["symptoms"].lower()
                 base_score = 0.15
@@ -686,22 +826,18 @@ class ImageClassifier:
                 elif linear_ratio <= 1.25 and is_disease_dicot:
                     base_score += 0.20
 
-                if "early blight" in name_low or "alternaria" in symp_low:
-                    base_score += ring_score * 0.70 + n_ratio * 0.55 + c_ratio * 0.35 + 0.15
+                if any(w in name_low or w in symp_low for w in ["spot", "blight", "canker", "zonation"]):
+                    base_score += ring_score * 0.70 + n_ratio * 0.55 + c_ratio * 0.35 + min(spot_count, 15) * 0.02
                 elif "late blight" in name_low or "water-soaked" in symp_low:
                     base_score += w_score * 0.50 + n_ratio * 0.35 + (0.15 if c_ratio > 0.08 else 0.0)
                 elif "rust" in name_low or "pustule" in symp_low:
                     base_score += (n_ratio * 0.40) + (c_ratio * 0.35) + 0.10
-                elif "curl" in name_low or "virus" in name_low:
+                elif "curl" in name_low or "virus" in name_low or "little leaf" in name_low:
                     base_score += c_ratio * 0.45
-                    if n_ratio > 0.03 or ring_score > 0.04:
+                    if n_ratio > 0.05 or ring_score > 0.06:
                         base_score *= 0.20
                 elif "powdery" in name_low or "mildew" in name_low:
                     base_score += p_score * 0.65 + 0.10
-                elif "blast" in name_low or "spot" in name_low:
-                    base_score += n_ratio * 0.40 + c_ratio * 0.25 + ring_score * 0.15
-                elif "bacterial" in name_low:
-                    base_score += w_score * 0.35 + n_ratio * 0.30 + c_ratio * 0.20
                 else:
                     base_score += (n_ratio + c_ratio) * 0.25
 
@@ -711,11 +847,12 @@ class ImageClassifier:
         scores.sort(key=lambda x: x[1], reverse=True)
         top_scores = scores[:4]
         max_s = max(s[1] for s in top_scores) if top_scores else 1.0
-        exp_sum = sum(math.exp(min(15.0, (s[1] - max_s) * 4.0)) for s in top_scores)
+        calib_temp = 5.5 if pathology_burden > 0.12 else 4.0
+        exp_sum = sum(math.exp(min(15.0, (s[1] - max_s) * calib_temp)) for s in top_scores)
 
         calibrated_predictions = []
         for name, raw_s, rec in top_scores:
-            prob = math.exp(min(15.0, (raw_s - max_s) * 4.0)) / (exp_sum + 1e-6)
+            prob = math.exp(min(15.0, (raw_s - max_s) * calib_temp)) / (exp_sum + 1e-6)
             calibrated_prob = round(max(0.04, min(0.96, prob)), 2)
             calibrated_predictions.append({
                 "name": name,
@@ -807,13 +944,23 @@ class ImageClassifier:
                 "The diagnosis is provided for advisory guidance; verification by physical plant tissue scouting is recommended."
             )
 
-        low_confidence_notice = ood_message if ood_detected else None
+        if top_confidence < IMAGE_CONFIDENCE_THRESHOLD:
+            low_confidence_notice = "Low-confidence prediction — field inspection recommended."
+            if not ood_message:
+                ood_message = "Low-confidence prediction — field inspection recommended."
+        else:
+            low_confidence_notice = ood_message if ood_detected else None
 
         xai_factors = [
             {
                 "factor": "Necrotic Lesion Tissue Ratio",
                 "impact": round(pathology["necrosis_ratio"] * 100, 1),
                 "description": f"{round(pathology['necrosis_ratio'] * 100, 1)}% of leaf surface shows cellular breakdown",
+            },
+            {
+                "factor": "Foliar Spot Lesion Count",
+                "impact": min(100, pathology.get("spot_count", 0) * 4),
+                "description": f"{pathology.get('spot_count', 0)} distinct necrotic spot lesions identified on leaf blade",
             },
             {
                 "factor": "Chlorotic Yellow Halo",

@@ -34,7 +34,15 @@ function startPythonBackend() {
   }
 
   console.log(`🌾 [Python Supervisor] Launching Python Agricultural Backend on port ${PYTHON_PORT}...`);
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const venvPythonWin = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe');
+  const venvPythonUnix = path.join(process.cwd(), '.venv', 'bin', 'python');
+  let pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  if (fs.existsSync(venvPythonWin)) {
+    pythonCmd = venvPythonWin;
+  } else if (fs.existsSync(venvPythonUnix)) {
+    pythonCmd = venvPythonUnix;
+  }
+
   try {
     pythonProcess = spawn(pythonCmd, [pythonScript, '--port', String(PYTHON_PORT)], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -735,8 +743,22 @@ app.post('/api/detect', (req: Request, res: Response) => {
   }
 });
 
-// 12. AI/ML Risk & Health Prediction with Explainable AI
-app.post('/api/predict', (req: Request, res: Response) => {
+// 12. AI/ML Risk & Health Prediction with Trained ML Models
+app.post('/api/predict', async (req: Request, res: Response) => {
+  try {
+    const pyReq = await fetch(`http://127.0.0.1:${PYTHON_PORT}/api/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    if (pyReq.ok) {
+      const pyData = await pyReq.json();
+      return res.json(pyData);
+    }
+  } catch (e) {
+    console.warn('[Express] Python ML service unavailable, falling back to internal engine');
+  }
+
   try {
     const input = {
       crop: req.body.crop || 'Cotton',
@@ -753,6 +775,35 @@ app.post('/api/predict', (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ error: 'Prediction model failed', details: String(error) });
   }
+});
+
+// 12b. 3-7 Day Risk Forecast Endpoint (Section 16)
+app.get('/api/risk-forecast/:fieldId', async (req: Request, res: Response) => {
+  try {
+    const days = req.query.days || '7';
+    const pyReq = await fetch(`http://127.0.0.1:${PYTHON_PORT}/api/risk-forecast/${req.params.fieldId}?days=${days}`);
+    if (pyReq.ok) {
+      const pyData = await pyReq.json();
+      return res.json(pyData);
+    }
+  } catch (e) {
+    // fallback
+  }
+  res.json({ field_id: req.params.fieldId, data_source: 'simulation', daily_forecast: [] });
+});
+
+// 12c. Field Inspection Priority Endpoint (Section 17)
+app.get('/api/field-priority', async (req: Request, res: Response) => {
+  try {
+    const pyReq = await fetch(`http://127.0.0.1:${PYTHON_PORT}/api/field-priority`);
+    if (pyReq.ok) {
+      const pyData = await pyReq.json();
+      return res.json(pyData);
+    }
+  } catch (e) {
+    // fallback
+  }
+  res.json({ directive: 'Monitor fields according to schedule', ranked_priority_list: [] });
 });
 
 // 13. Farmer Advisor Action Plan Endpoint

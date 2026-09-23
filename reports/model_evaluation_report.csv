@@ -1,0 +1,6 @@
+Target,Model_Type,Best_Algorithm,Test_Records,Accuracy_Pct,Precision_Weighted,Recall_Weighted,F1_Weighted,ROC_AUC,RMSE,R2_Score
+risk_level,classification,HistGradientBoosting,1500,98.80%,0.9881,0.988,0.988,0.9998,N/A,N/A
+disease,classification,XGBoost,1500,90.00%,0.9033,0.9,0.9009,0.9909,N/A,N/A
+pest,classification,XGBoost,1500,94.00%,0.9383,0.94,0.9351,N/A,N/A,N/A
+severity,classification,XGBoost,1500,72.47%,0.7047,0.7247,0.7108,0.9093,N/A,N/A
+risk_score,regression,HistGradientBoosting Regressor,1500,N/A,N/A,N/A,N/A,N/A,6.2613,0.9334

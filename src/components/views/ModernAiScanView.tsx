@@ -446,7 +446,11 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
             timestamp: new Date().toLocaleTimeString(),
             crop: activeCrop,
             category: 'Unverified Specimen',
-            name: response.error_type === 'NON_PLANT_SPECIMEN' ? 'Non-Plant Specimen' : (response.error_type || 'Quality Issue'),
+            name: response.error_type === 'NON_PLANT_SPECIMEN'
+              ? 'Non-Plant Specimen'
+              : response.error_type === 'DECODE_ERROR'
+              ? 'Image Format Unreadable'
+              : (response.error_type || 'Quality Issue'),
             confidence: 0.15,
             severity: 'Low',
             severity_pct: 15,

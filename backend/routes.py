@@ -11,6 +11,10 @@ from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 from typing import Dict, Any, Tuple
 
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 from agri_data import CROPS_DATA, DISEASES_DATA, PESTS_DATA, OFFICERS_DATA, KENDRA_DEALERS
 from data_store import store
 from ai_engine import AgriculturalAIEngine
@@ -22,6 +26,14 @@ from outbreak_simulator import outbreak_simulator
 from management_advisor import management_advisor
 from image_classifier import ImageClassifier
 from pest_classifier import PestClassifier
+
+# Import trained ML service
+try:
+    from ml_service import ml_service
+    _ML_SERVICE_AVAILABLE = True
+except Exception as _e:
+    print(f"[Routes] ML Service init note: {_e}")
+    _ML_SERVICE_AVAILABLE = False
 
 START_TIME = time.time()
 
@@ -355,9 +367,12 @@ def handle_request(method: str, path: str, query_params: Dict[str, Any], body: D
         )
         return 200, res
 
-    # 12. Predict Risk
+    # 12. Predict Risk (Trained Machine Learning Model Inference)
     if clean_path == "/api/predict" and method == "POST":
-        res = AgriculturalAIEngine.predict_risk(body)
+        if _ML_SERVICE_AVAILABLE:
+            res = ml_service.predict(body)
+        else:
+            res = AgriculturalAIEngine.predict_risk(body)
         return 200, res
 
     # 13. Recommendations
@@ -676,32 +691,43 @@ def handle_request(method: str, path: str, query_params: Dict[str, Any], body: D
             "fields": prioritized,
         }
 
-    # 25. Field Inspection Priority Engine ("Inspect These Fields First")
-    if clean_path == "/api/risk/priority" and method == "GET":
-        fields = store.data.get("fields", [])
-        horizon = int(query_params.get("days", [5])[0] if isinstance(query_params.get("days"), list) else query_params.get("days", 5))
-        prioritized = risk_engine.prioritize_fields(fields, forecast_days=horizon)
-        urgent = [f for f in prioritized if f["risk_level"] in ["CRITICAL", "HIGH"]]
-        routine = [f for f in prioritized if f["risk_level"] not in ["CRITICAL", "HIGH"]]
-        return 200, {
-            "horizon_days": horizon,
-            "directive": (
-                f"Inspect {len(urgent)} prioritized fields first. Daily photo inspection is not required for the remaining {len(routine)} low-risk fields."
-                if urgent
-                else "All fields currently exhibit healthy baseline. Routine weekly scouting recommended."
-            ),
-            "urgent_inspection_fields": urgent,
-            "routine_monitoring_fields": routine,
-            "ranked_priority_list": prioritized,
-        }
+    # 25. Field Inspection Priority Engine ("Inspect These Fields First" per Section 17)
+    if clean_path in ("/api/field-priority", "/api/risk/priority") and method == "GET":
+        days = int(query_params.get("days", [5])[0] if isinstance(query_params.get("days"), list) else query_params.get("days", 5))
+        if _ML_SERVICE_AVAILABLE:
+            prio_res = ml_service.get_field_priority(days=days)
+            return 200, prio_res
+        else:
+            fields = store.data.get("fields", [])
+            prioritized = risk_engine.prioritize_fields(fields, forecast_days=days)
+            urgent = [f for f in prioritized if f["risk_level"] in ["CRITICAL", "HIGH"]]
+            routine = [f for f in prioritized if f["risk_level"] not in ["CRITICAL", "HIGH"]]
+            return 200, {
+                "horizon_days": days,
+                "directive": f"Inspect {len(urgent)} prioritized fields first.",
+                "urgent_inspection_fields": urgent,
+                "routine_monitoring_fields": routine,
+                "ranked_priority_list": prioritized,
+            }
 
-    # 26. Single Field Deep-Dive Risk
+    # 26. 3-7 Day Risk Prediction per Field (Section 16: GET /api/risk-forecast/{field_id})
+    if clean_path.startswith("/api/risk-forecast/") and method == "GET":
+        field_id = clean_path.replace("/api/risk-forecast/", "").strip()
+        days = int(query_params.get("days", [7])[0] if isinstance(query_params.get("days"), list) else query_params.get("days", 7))
+        if _ML_SERVICE_AVAILABLE:
+            forecast_res = ml_service.get_risk_forecast(field_id, days=days)
+            return 200, forecast_res
+        else:
+            fields = store.data.get("fields", [])
+            field = next((f for f in fields if f.get("id") == field_id), {"id": field_id, "crop": "Rice"})
+            return 200, risk_engine.predict_field_risk(field, forecast_days=days)
+
+    # 26b. Single Field Deep-Dive Risk (Legacy compatibility)
     if clean_path.startswith("/api/risk/field/") and method == "GET":
         field_id = clean_path.replace("/api/risk/field/", "").strip()
         fields = store.data.get("fields", [])
         field = next((f for f in fields if f.get("id") == field_id), None)
         if not field:
-            # Fallback mock field if requested ID is dynamic
             field = {"id": field_id, "name": f"Field {field_id}", "crop": "Cotton", "growth_stage": "Boll Formation"}
         horizon = int(query_params.get("days", [5])[0] if isinstance(query_params.get("days"), list) else query_params.get("days", 5))
         risk_result = risk_engine.predict_field_risk(field, forecast_days=horizon)

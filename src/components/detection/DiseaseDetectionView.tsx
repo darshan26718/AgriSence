@@ -69,8 +69,8 @@ export const DiseaseDetectionView: React.FC<DiseaseDetectionViewProps> = ({
         const dataUrl = reader.result as string;
         setUserImagePreview(dataUrl);
         setImageSourceType('upload');
-        // Run AI diagnosis on uploaded leaf
-        runInference(selectedCrop, 'Uploaded Image', true);
+        // Run AI diagnosis on uploaded leaf immediately with dataUrl
+        runInference(selectedCrop, 'Uploaded Image', true, dataUrl);
       };
       reader.readAsDataURL(file);
     }
@@ -80,7 +80,7 @@ export const DiseaseDetectionView: React.FC<DiseaseDetectionViewProps> = ({
   const handleCameraCapture = (capturedDataUrl: string) => {
     setUserImagePreview(capturedDataUrl);
     setImageSourceType('camera');
-    runInference(selectedCrop, 'Live Camera Captured Specimen', true);
+    runInference(selectedCrop, 'Live Camera Captured Specimen', true, capturedDataUrl);
   };
 
   const handleClearImage = () => {
@@ -97,13 +97,14 @@ export const DiseaseDetectionView: React.FC<DiseaseDetectionViewProps> = ({
     runInference(sample.crop, sample.expectedIssue, false);
   };
 
-  const runInference = async (crop: string, hint?: string, isUserImg?: boolean) => {
+  const runInference = async (crop: string, hint?: string, isUserImg?: boolean, imageOverride?: string) => {
     setIsAnalyzing(true);
     setSavedSuccess(false);
 
     try {
-      const payload = userImagePreview ? {
-        image: userImagePreview,
+      const activeImage = imageOverride !== undefined ? imageOverride : userImagePreview;
+      const payload = activeImage ? {
+        image: activeImage,
         crop,
         hint,
         isUserImage: isUserImg,

@@ -24,8 +24,11 @@ import base64
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple, Optional
 
+from urllib.parse import unquote as url_unquote
+from urllib.request import urlopen as url_open, Request as url_Request
+
 try:
-    from PIL import Image, ImageStat, ImageFilter
+    from PIL import Image, ImageStat, ImageFilter, ImageOps
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
@@ -129,22 +132,91 @@ class PestClassifier:
 
     @classmethod
     def decode_image(cls, image_input: Any) -> Tuple[Optional[Any], Optional[str]]:
-        if not PILLOW_AVAILABLE:
-            return None, "Pillow library is not installed."
         try:
+            from PIL import Image, ImageOps
+        except ImportError:
+            return None, "Pillow library is not installed."
+
+        try:
+            if isinstance(image_input, dict):
+                image_input = image_input.get("image") or image_input.get("image_data") or image_input.get("data")
+
             if isinstance(image_input, bytes):
                 img = Image.open(io.BytesIO(image_input))
-                img.verify()
-                img = Image.open(io.BytesIO(image_input))
+                try:
+                    img = ImageOps.exif_transpose(img)
+                except Exception:
+                    pass
                 return img.convert("RGB"), None
+
             if isinstance(image_input, str):
-                if "," in image_input:
+                image_input = image_input.strip().strip('"\'')
+                if not image_input:
+                    return None, "Empty image input string."
+
+                if image_input.startswith(("http://", "https://")):
+                    req = url_Request(image_input, headers={"User-Agent": "AgriSense/1.0"})
+                    with url_open(req, timeout=8) as resp:
+                        raw_bytes = resp.read()
+                        img = Image.open(io.BytesIO(raw_bytes))
+                        try:
+                            img = ImageOps.exif_transpose(img)
+                        except Exception:
+                            pass
+                        return img.convert("RGB"), None
+
+                if os.path.isfile(image_input):
+                    img = Image.open(image_input)
+                    try:
+                        img = ImageOps.exif_transpose(img)
+                    except Exception:
+                        pass
+                    return img.convert("RGB"), None
+
+                if "," in image_input and ("data:" in image_input or ";base64" in image_input):
                     image_input = image_input.split(",", 1)[1]
-                raw_bytes = base64.b64decode(image_input)
+
+                if "%" in image_input:
+                    image_input = url_unquote(image_input)
+
+                cleaned = "".join(image_input.split())
+                pad = len(cleaned) % 4
+                if pad != 0:
+                    cleaned += "=" * (4 - pad)
+
+                raw_bytes = None
+                try:
+                    raw_bytes = base64.b64decode(cleaned)
+                except Exception:
+                    try:
+                        raw_bytes = base64.urlsafe_b64decode(cleaned)
+                    except Exception:
+                        if " " in image_input:
+                            try:
+                                raw_bytes = base64.b64decode("".join(image_input.replace(" ", "+").split()))
+                            except Exception:
+                                pass
+
+                if raw_bytes is None:
+                    return None, "Failed to decode base64 image data."
+
                 img = Image.open(io.BytesIO(raw_bytes))
-                img.verify()
-                img = Image.open(io.BytesIO(raw_bytes))
-                return img.convert("RGB"), None
+                try:
+                    img = ImageOps.exif_transpose(img)
+                except Exception:
+                    pass
+
+                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                    bg = Image.new("RGB", img.size, (255, 255, 255))
+                    alpha = img.convert("RGBA").split()[-1]
+                    bg.paste(img.convert("RGB"), mask=alpha)
+                    img = bg
+                else:
+                    img = img.convert("RGB")
+
+                img.load()
+                return img, None
+
             return None, "Unsupported image format."
         except Exception as e:
             return None, f"Could not decode image: {str(e)}"

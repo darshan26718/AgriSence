@@ -40,7 +40,6 @@ class AgriRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
-        self.send_header("Connection", "close")
         self.send_header("X-Powered-By", "AgriSense-Python-Engine/3.10")
 
     def do_OPTIONS(self):
@@ -71,25 +70,33 @@ class AgriRequestHandler(BaseHTTPRequestHandler):
             self._send_json_response(500, {"error": str(e)})
 
     def do_POST(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        query_params = parse_qs(parsed.query)
+        try:
+            parsed = urlparse(self.path)
+            path = parsed.path
+            query_params = parse_qs(parsed.query)
 
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = {}
-        if content_length > 0:
-            raw_body = self.rfile.read(content_length).decode("utf-8")
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = {}
+            if content_length > 0:
+                raw_body = self.rfile.read(content_length).decode("utf-8", errors="replace")
+                try:
+                    body = json.loads(raw_body)
+                except Exception as je:
+                    sys.stderr.write(f"[Python-Backend] JSON parse error: {je}\n")
+                    body = {}
+
+            if path.startswith("/api/"):
+                status_code, response_data = handle_request("POST", path, query_params, body)
+                self._send_json_response(status_code, response_data)
+                return
+
+            self._send_json_response(404, {"error": "Not Found", "path": path})
+        except Exception as e:
+            traceback.print_exc()
             try:
-                body = json.loads(raw_body)
+                self._send_json_response(500, {"error": str(e)})
             except Exception:
-                body = {}
-
-        if path.startswith("/api/"):
-            status_code, response_data = handle_request("POST", path, query_params, body)
-            self._send_json_response(status_code, response_data)
-            return
-
-        self._send_json_response(404, {"error": "Not Found", "path": path})
+                pass
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
