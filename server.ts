@@ -18,7 +18,7 @@ import { FieldRecord, DetectionResult } from './src/types/agri';
 
 const app = express();
 const PORT = 3000;
-const PYTHON_PORT = 5050;
+const PYTHON_PORT = 5055;
 
 // ----------------------------------------------------
 // PYTHON BACKEND PROCESS SUPERVISOR
@@ -34,8 +34,9 @@ function startPythonBackend() {
   }
 
   console.log(`🌾 [Python Supervisor] Launching Python Agricultural Backend on port ${PYTHON_PORT}...`);
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
   try {
-    pythonProcess = spawn('python3', [pythonScript, '--port', String(PYTHON_PORT)], {
+    pythonProcess = spawn(pythonCmd, [pythonScript, '--port', String(PYTHON_PORT)], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUNBUFFERED: '1' },
     });
@@ -81,15 +82,27 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 // Forwards all /api/* requests directly to Python backend
 // ----------------------------------------------------
 app.use('/api', (req: Request, res: Response, next) => {
+  const hasBody = req.body && Object.keys(req.body).length > 0;
+  const bodyData = hasBody ? JSON.stringify(req.body) : null;
+
+  const reqHeaders: Record<string, any> = {
+    ...req.headers,
+    host: `127.0.0.1:${PYTHON_PORT}`,
+  };
+
+  if (bodyData) {
+    reqHeaders['content-type'] = 'application/json';
+    reqHeaders['content-length'] = Buffer.byteLength(bodyData);
+  } else if (req.method === 'GET' || req.method === 'HEAD') {
+    delete reqHeaders['content-length'];
+  }
+
   const options: http.RequestOptions = {
     hostname: '127.0.0.1',
     port: PYTHON_PORT,
     path: req.originalUrl,
     method: req.method,
-    headers: {
-      ...req.headers,
-      host: `127.0.0.1:${PYTHON_PORT}`,
-    },
+    headers: reqHeaders,
     timeout: 15000,
   };
 
@@ -107,16 +120,13 @@ app.use('/api', (req: Request, res: Response, next) => {
     next();
   });
 
-  // If request has a body (e.g. from POST/PUT), serialize it to proxy request
-  if (req.body && Object.keys(req.body).length > 0) {
-    const bodyData = JSON.stringify(req.body);
-    proxyReq.setHeader('Content-Type', 'application/json');
-    proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+  if (bodyData) {
     proxyReq.write(bodyData);
   }
 
   proxyReq.end();
 });
+
 
 // ----------------------------------------------------
 // PERSISTENT DISK STORAGE ENGINE

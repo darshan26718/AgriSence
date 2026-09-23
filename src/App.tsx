@@ -17,6 +17,7 @@ import { ModernIrrigationView } from './components/views/ModernIrrigationView';
 import { ModernAiAdvisoryView } from './components/views/ModernAiAdvisoryView';
 import { ModernReportsView } from './components/views/ModernReportsView';
 import { ModernProfileView } from './components/views/ModernProfileView';
+import { EarlyRiskIntelligenceView } from './components/earlywarning/EarlyRiskIntelligenceView';
 
 // Auth Pages & Modals
 import { ModernLoginPage } from './components/auth/ModernLoginPage';
@@ -29,6 +30,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 // Hands-Free Voice Assistance Components & Services
 import { FloatingVoiceButton } from './components/speech/FloatingVoiceButton';
 import { FieldVoiceAssistantModal } from './components/speech/FieldVoiceAssistantModal';
+import { GlobalVoicePlayerBar } from './components/speech/GlobalVoicePlayerBar';
 import { speechService } from './services/speechService';
 import { ParsedVoiceCommand, VoiceRecognitionStatus } from './types/speech';
 
@@ -341,14 +343,26 @@ export default function App() {
               if (crop) setAdvisoryInitialQuery(`Tell me about ${crop}`);
               handleTabSelect('advisory');
             }}
+            onNavigateToEarlyWarning={() => handleTabSelect('early-warning')}
             onViewFieldDetails={() => handleTabSelect('fields')}
             activeAlerts={activeAlerts}
             onDismissAlert={id => setActiveAlerts(prev => prev.filter(a => a.id !== id))}
             language={language}
           />
         );
+      case 'early-warning':
+        return (
+          <EarlyRiskIntelligenceView
+            fields={fields}
+            onNavigateToScan={() => handleTabSelect('ai-scan')}
+            onNavigateToFields={() => handleTabSelect('fields')}
+            language={language}
+            onShowToast={showToast}
+          />
+        );
       case 'ai-scan':
         return (
+
           <ModernAiScanView
             onShowToast={showToast}
             onNavigateToAdvisory={() => handleTabSelect('advisory')}
@@ -436,6 +450,7 @@ export default function App() {
             onNavigateToWeather={() => handleTabSelect('weather')}
             onNavigateToAgroCentres={() => handleTabSelect('agro-centres')}
             onNavigateToAdvisory={() => handleTabSelect('advisory')}
+            onNavigateToEarlyWarning={() => handleTabSelect('early-warning')}
             onViewFieldDetails={() => handleTabSelect('fields')}
             activeAlerts={activeAlerts}
             onDismissAlert={id => setActiveAlerts(prev => prev.filter(a => a.id !== id))}
@@ -574,6 +589,9 @@ export default function App() {
         }}
         language={language}
       />
+
+      {/* Global Floating AI Voice Speaker Audio Player */}
+      <GlobalVoicePlayerBar />
 
       {/* Global Floating Hands-Free Voice Assistant Button */}
       <FloatingVoiceButton

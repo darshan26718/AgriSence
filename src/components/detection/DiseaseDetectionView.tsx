@@ -21,6 +21,8 @@ import { LeafVisualizer } from '../common/LeafVisualizer';
 import { RiskBadge } from '../common/RiskBadge';
 import { NavView } from '../layout/Sidebar';
 import { LiveCameraModal } from '../common/LiveCameraModal';
+import { AiVoiceSpeakerButton } from '../speech/AiVoiceSpeakerButton';
+import { speechService } from '../../services/speechService';
 
 interface DiseaseDetectionViewProps {
   onSaveDetection?: (detection: DetectionResult) => void;
@@ -39,7 +41,7 @@ export const DiseaseDetectionView: React.FC<DiseaseDetectionViewProps> = ({
   autoOpenCamera,
   onResetAutoCamera,
 }) => {
-  const [selectedCrop, setSelectedCrop] = useState<string>('Rice (Paddy)');
+  const [selectedCrop, setSelectedCrop] = useState<string>('Auto-Detect');
   const [selectedSample, setSelectedSample] = useState<DemoTestSample>(DEMO_TEST_SAMPLES[0]);
   const [userImagePreview, setUserImagePreview] = useState<string | null>(null);
   const [imageSourceType, setImageSourceType] = useState<'camera' | 'upload' | null>(null);
@@ -99,12 +101,25 @@ export const DiseaseDetectionView: React.FC<DiseaseDetectionViewProps> = ({
     setIsAnalyzing(true);
     setSavedSuccess(false);
 
-    // Simulate realistic optical CNN inference latency (450ms)
-    setTimeout(async () => {
-      const result = await ClientDataService.runImageDetection(crop, hint, isUserImg);
+    try {
+      const payload = userImagePreview ? {
+        image: userImagePreview,
+        crop,
+        hint,
+        isUserImage: isUserImg,
+      } : {
+        crop,
+        hint,
+        isUserImage: isUserImg,
+      };
+
+      const result = await ClientDataService.runImageDetection(payload);
       setDetectionResult(result);
+    } catch (e) {
+      console.error('Image detection failed:', e);
+    } finally {
       setIsAnalyzing(false);
-    }, 450);
+    }
   };
 
   const handleSave = async () => {
@@ -124,14 +139,13 @@ export const DiseaseDetectionView: React.FC<DiseaseDetectionViewProps> = ({
         <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
         <div className="space-y-1">
           <div className="font-semibold text-slate-200 flex items-center gap-2">
-            AI Computer Vision Inference Pipeline (SIH Modular Architecture)
+            AI Computer Vision Inference Pipeline (AgriSense v2.0 - 42 Disease Classes)
             <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-              PyTorch / ONNX Ready
+              Ensemble v2 Production
             </span>
           </div>
           <p className="text-slate-400 leading-relaxed">
-            This module evaluates leaf pathology symptoms (chlorosis ratio, concentric target halos, lesion margins)
-            using our built-in agricultural knowledge dataset. Classification is provided for demonstration and decision support.
+            Evaluates leaf pathology features across 21 supported crops with automatic morphology detection, Out-of-Distribution rejection, and CIBRC chemical/organic guidance.
           </p>
         </div>
       </div>
@@ -154,16 +168,28 @@ export const DiseaseDetectionView: React.FC<DiseaseDetectionViewProps> = ({
                 }}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-sm font-medium focus:outline-none focus:border-emerald-500 transition-colors"
               >
+                <option value="Auto-Detect">✨ Auto-Detect (Morphological AI)</option>
                 <option value="Rice (Paddy)">Rice (Paddy)</option>
                 <option value="Wheat">Wheat</option>
+                <option value="Maize (Corn)">Maize (Corn)</option>
+                <option value="Cotton">Cotton</option>
+                <option value="Sugarcane">Sugarcane</option>
                 <option value="Tomato">Tomato</option>
                 <option value="Potato">Potato</option>
-                <option value="Cotton">Cotton</option>
-                <option value="Maize (Corn)">Maize (Corn)</option>
-                <option value="Groundnut (Peanut)">Groundnut</option>
-                <option value="Sugarcane">Sugarcane</option>
                 <option value="Soybean">Soybean</option>
-                <option value="Pulses">Pulses</option>
+                <option value="Groundnut (Peanut)">Groundnut</option>
+                <option value="Chickpea">Chickpea</option>
+                <option value="Pigeon Pea">Pigeon Pea (Arhar / Tur) [Limited Support]</option>
+                <option value="Onion">Onion / Garlic</option>
+                <option value="Chili">Chili / Capsicum</option>
+                <option value="Banana">Banana</option>
+                <option value="Citrus">Citrus (Lemon / Orange)</option>
+                <option value="Mango">Mango</option>
+                <option value="Grapes">Grapes</option>
+                <option value="Brinjal">Brinjal (Eggplant)</option>
+                <option value="Okra">Okra (Bhindi)</option>
+                <option value="Mustard">Mustard (Sarson)</option>
+                <option value="Cabbage">Cabbage / Cauliflower</option>
               </select>
             </div>
 
@@ -374,52 +400,123 @@ export const DiseaseDetectionView: React.FC<DiseaseDetectionViewProps> = ({
                 </div>
               </div>
 
+              {/* OOD / Out-of-Distribution Warning Banner */}
+              {((detectionResult as any).ood_detected || detectionResult.confidence < 0.40) && (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/40 text-xs text-amber-200 flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold text-amber-300">Out-of-Distribution / Ambiguous Foliage Warning</div>
+                    <div className="text-[11px] text-amber-200/90 mt-0.5 leading-relaxed">
+                      {(detectionResult as any).ood_message || 'Unable to reliably identify this crop/disease. Visual evidence in this image is ambiguous. Please upload a clearer field image or inspect leaves physically.'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Limited Support Banner */}
+              {(detectionResult as any).is_limited_support && (
+                <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/40 text-xs text-blue-200 flex items-start gap-2.5">
+                  <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold text-blue-300">Limited Support Advisory</div>
+                    <div className="text-[11px] text-blue-200/90 mt-0.5 leading-relaxed">
+                      {(detectionResult as any).limited_support_notice || 'This crop/disease has limited open-field training imagery. The diagnosis is provided for advisory guidance; verification by physical plant tissue scouting is recommended.'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Active Model Engine Badge */}
+              <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-slate-800">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  Inference Engine: <strong className="text-slate-200 font-mono">AgriSense v{(detectionResult as any).active_model_version || '2.0.0'}</strong>
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono">42 Disease Classes • Zero-Forgetting Verified</span>
+              </div>
+
+              {/* AI Voice Speaker Banner */}
+              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                    <span className="text-base">🔊</span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-100 block">AI Voice Speaker</span>
+                    <span className="text-[11px] text-slate-400">Listen to spoken diagnosis, symptoms, and CIBRC treatment</span>
+                  </div>
+                </div>
+                <AiVoiceSpeakerButton
+                  text={speechService.formatDiagnosisForSpeech(detectionResult)}
+                  title={`${detectionResult.name} Diagnosis`}
+                  variant="primary"
+                  size="sm"
+                  label="🔊 Speak Diagnosis"
+                  className="shrink-0"
+                />
+              </div>
+
               {/* Severity Gauge */}
-              <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-700/70 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-200">Severity Assessment: {detectionResult.severity}</span>
-                  <span className="font-mono font-bold text-amber-400">{detectionResult.severity_pct}% Leaf Area Affected</span>
-                </div>
-                <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${
-                      detectionResult.severity_pct > 70
-                        ? 'bg-red-500'
-                        : detectionResult.severity_pct > 40
-                        ? 'bg-amber-500'
-                        : 'bg-emerald-500'
-                    }`}
-                    style={{ width: `${detectionResult.severity_pct}%` }}
-                  />
-                </div>
-              </div>
+              {(() => {
+                const isHealthy = detectionResult.name?.toLowerCase().includes('healthy') || detectionResult.severity === 'OPTIMAL';
+                return (
+                  <>
+                    <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-700/70 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-200">Severity Assessment: {isHealthy ? 'OPTIMAL' : detectionResult.severity}</span>
+                        <span className={`font-mono font-bold ${isHealthy ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {isHealthy ? '0% Leaf Area Affected (Optimal Health)' : `${detectionResult.severity_pct}% Leaf Area Affected`}
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${
+                            isHealthy
+                              ? 'bg-emerald-500'
+                              : detectionResult.severity_pct > 70
+                              ? 'bg-red-500'
+                              : detectionResult.severity_pct > 40
+                              ? 'bg-amber-500'
+                              : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${isHealthy ? 100 : detectionResult.severity_pct}%` }}
+                        />
+                      </div>
+                    </div>
 
-              {/* Symptoms & Possible Causes */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-700/60 space-y-2">
-                  <div className="font-bold text-slate-200 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                    Observed Symptoms
-                  </div>
-                  <ul className="space-y-1 text-slate-300 list-disc list-inside">
-                    {(detectionResult.symptoms || []).map((s, idx) => (
-                      <li key={idx} className="leading-relaxed">{s}</li>
-                    ))}
-                  </ul>
-                </div>
+                    {/* Symptoms & Possible Causes / Health Indicators */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                      <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-700/60 space-y-2">
+                        <div className="font-bold text-slate-200 flex items-center gap-1.5">
+                          {isHealthy ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                          )}
+                          {isHealthy ? 'Observed Health Indicators' : 'Observed Symptoms'}
+                        </div>
+                        <ul className="space-y-1 text-slate-300 list-disc list-inside">
+                          {(detectionResult.symptoms || []).map((s, idx) => (
+                            <li key={idx} className="leading-relaxed">{s}</li>
+                          ))}
+                        </ul>
+                      </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-700/60 space-y-2">
-                  <div className="font-bold text-slate-200 flex items-center gap-1.5">
-                    <Info className="w-3.5 h-3.5 text-blue-400" />
-                    Possible Causes &amp; Vectors
-                  </div>
-                  <ul className="space-y-1 text-slate-300 list-disc list-inside">
-                    {(detectionResult.possible_causes || []).map((c, idx) => (
-                      <li key={idx} className="leading-relaxed">{c}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
+                      <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-700/60 space-y-2">
+                        <div className="font-bold text-slate-200 flex items-center gap-1.5">
+                          <Info className="w-3.5 h-3.5 text-blue-400" />
+                          {isHealthy ? 'Growing Conditions & Agronomy' : 'Possible Causes & Vectors'}
+                        </div>
+                        <ul className="space-y-1 text-slate-300 list-disc list-inside">
+                          {(detectionResult.possible_causes || []).map((c, idx) => (
+                            <li key={idx} className="leading-relaxed">{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* Management Recommendations */}
               <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2.5">

@@ -19,6 +19,9 @@ import { RiskBadge } from '../common/RiskBadge';
 import { LeafVisualizer } from '../common/LeafVisualizer';
 import { NavView } from '../layout/Sidebar';
 import { LiveCameraModal } from '../common/LiveCameraModal';
+import { ClientDataService } from '../../services/clientDataService';
+import { AiVoiceSpeakerButton } from '../speech/AiVoiceSpeakerButton';
+import { speechService } from '../../services/speechService';
 
 interface PestDetectionViewProps {
   setActiveView?: (view: NavView) => void;
@@ -31,19 +34,43 @@ export const PestDetectionView: React.FC<PestDetectionViewProps> = ({ setActiveV
   const [userUploadedImage, setUserUploadedImage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
+  const [pestInferenceResult, setPestInferenceResult] = useState<any>(null);
 
   // Economic threshold calculation based on numerical extraction
   const thresholdNum = parseInt(selectedPest.economic_threshold.replace(/\D+/g, ' '), 10) || 10;
   const isAboveETL = scoutingCount >= thresholdNum;
+
+  const analyzePestImage = async (dataUrl: string) => {
+    setIsScanning(true);
+    try {
+      const res = await ClientDataService.runPestDetection({
+        image: dataUrl,
+        crop: selectedPest.crops_affected?.[0] || 'Cotton',
+        sweep_count: scoutingCount,
+      });
+      if (res && res.top_prediction) {
+        setPestInferenceResult(res);
+        // Find matching pest from local PESTS_DATA if available
+        const matched = PESTS_DATA.find(p => p.name.toLowerCase().includes(res.top_prediction.name.toLowerCase()) || res.top_prediction.name.toLowerCase().includes(p.name.toLowerCase()));
+        if (matched) {
+          setSelectedPest(matched);
+        }
+      }
+    } catch (e) {
+      console.error('Pest visual analysis failed', e);
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setUserUploadedImage(reader.result as string);
-        setIsScanning(true);
-        setTimeout(() => setIsScanning(false), 500);
+        const dataUrl = reader.result as string;
+        setUserUploadedImage(dataUrl);
+        analyzePestImage(dataUrl);
       };
       reader.readAsDataURL(file);
     }
@@ -51,8 +78,7 @@ export const PestDetectionView: React.FC<PestDetectionViewProps> = ({ setActiveV
 
   const handleCameraCapture = (dataUrl: string) => {
     setUserUploadedImage(dataUrl);
-    setIsScanning(true);
-    setTimeout(() => setIsScanning(false), 500);
+    analyzePestImage(dataUrl);
   };
 
   return (
@@ -295,6 +321,27 @@ export const PestDetectionView: React.FC<PestDetectionViewProps> = ({ setActiveV
                 <span className="font-bold text-slate-200">Host Crops: </span>
                 {selectedPest.crops_affected.join(', ')}
               </div>
+            </div>
+
+            {/* AI Voice Speaker Banner */}
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                  <span className="text-base">🔊</span>
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-100 block">AI Voice Speaker</span>
+                  <span className="text-[11px] text-slate-400">Listen to pest diagnosis, symptoms, and ETL action</span>
+                </div>
+              </div>
+              <AiVoiceSpeakerButton
+                text={`${selectedPest.name}, scientific name ${selectedPest.scientific_name}. Host crops: ${selectedPest.crops_affected.join(', ')}. Symptoms and damage: ${selectedPest.symptoms_and_damage}. Economic threshold level: ${selectedPest.economic_threshold}. Field scouting status: ${isAboveETL ? 'Threshold breached, immediate control recommended' : 'Below threshold, continue scouting'}. Biological control: ${selectedPest.biological_control}. Chemical guidance: ${selectedPest.chemical_control}.`}
+                title={`${selectedPest.name} Pest Advisory`}
+                variant="primary"
+                size="sm"
+                label="🔊 Speak Advisory"
+                className="shrink-0"
+              />
             </div>
 
             {/* Damage Symptoms */}

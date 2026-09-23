@@ -106,7 +106,7 @@ export interface DetectionResult {
   imageUrl?: string;
   imageName?: string;
   crop: string;
-  category: 'Disease' | 'Pest' | 'Healthy';
+  category: 'Disease' | 'Pest' | 'Healthy' | 'Fungal Disease' | 'Insect Pest' | 'Oomycete Disease' | 'Bacterial Disease' | string;
   name: string;
   confidence: number;
   severity: SeverityLevel;
@@ -118,8 +118,8 @@ export interface DetectionResult {
   management_preventive: string;
   management_biological: string;
   management_ipm: string;
-  xai_factors: XAIFactor[];
-  counterfactual_tip: string;
+  xai_factors?: XAIFactor[];
+  counterfactual_tip?: string;
 }
 
 export interface WeatherAnalysisPoint {

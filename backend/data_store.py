@@ -266,6 +266,12 @@ class DataStore:
                 "description": "Minimum Support Price (MSP) benchmarks, modal market prices, harvest peak windows, safe storage moisture thresholds, and value addition.",
                 "category": "Agri-Economics",
             },
+            "crop_recommendation.csv": {
+                "id": "crop_recommendation",
+                "title": "Soil Nutrients & Precision Crop Recommendation Model Dataset",
+                "description": "2,200 multi-parameter field records covering Nitrogen (N), Phosphorus (P), Potassium (K), Temperature, Humidity, pH, and Rainfall across 22 major crop species.",
+                "category": "Precision Soil & Crop Recommendation",
+            },
         }
 
         results = []

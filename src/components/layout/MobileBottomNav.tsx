@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, ScanSearch, MapPin, CloudSun, Building2, GraduationCap, User } from 'lucide-react';
+import { LayoutDashboard, ShieldAlert, ScanSearch, MapPin, CloudSun, Building2, GraduationCap, User } from 'lucide-react';
 import { AppLanguage, getLocale } from '../../locales';
 import { ModernNavTab } from './ModernSidebar';
 
@@ -18,12 +18,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   const tabs = [
     { id: 'dashboard', label: t.home, icon: LayoutDashboard },
+    { id: 'early-warning', label: 'Risk', icon: ShieldAlert },
     { id: 'ai-scan', label: 'Scan', icon: ScanSearch },
     { id: 'weather', label: 'Weather', icon: CloudSun },
     { id: 'agro-centres', label: 'Centres', icon: Building2 },
-    { id: 'agri-experts', label: 'Doctors', icon: GraduationCap },
     { id: 'profile', label: t.profile, icon: User },
   ] as const;
+
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 py-1 shadow-lg select-none">

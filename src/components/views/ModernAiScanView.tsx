@@ -35,6 +35,9 @@ import { AGRI_EXPERTS_DATA, calculateDistanceKm } from '../../data/agriExpertsDa
 import { AGRO_CENTRES_DATA } from '../../data/agroCentresData';
 import { UserLiveLocation } from '../../types/location';
 import { AppLanguage, getLocale } from '../../locales';
+import { ClientDataService } from '../../services/clientDataService';
+import { AiVoiceSpeakerButton } from '../speech/AiVoiceSpeakerButton';
+import { speechService } from '../../services/speechService';
 
 interface ModernAiScanViewProps {
   onShowToast: (msg: string) => void;
@@ -63,7 +66,7 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysisStage, setAnalysisStage] = useState<number>(0);
   const [analysisResult, setAnalysisResult] = useState<DetectionResult | null>(null);
-  const [selectedCropHint, setSelectedCropHint] = useState<string>('Tomato');
+  const [selectedCropHint, setSelectedCropHint] = useState<string>('Auto-Detect');
   const [activeImageView, setActiveImageView] = useState<'original' | 'processed' | 'gradcam'>('original');
   const [activeSolutionTab, setActiveSolutionTab] = useState<'treatment' | 'prevention' | 'remedies' | 'costEffective'>('treatment');
 
@@ -72,14 +75,28 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
 
   const supportedCrops = [
-    'Tomato',
-    'Cotton',
+    'Auto-Detect',
     'Rice (Paddy)',
-    'Potato',
     'Wheat',
     'Maize (Corn)',
-    'Chilli',
+    'Cotton',
+    'Sugarcane',
+    'Tomato',
+    'Potato',
     'Soybean',
+    'Groundnut (Peanut)',
+    'Chickpea',
+    'Pigeon Pea (Arhar / Tur)',
+    'Onion / Garlic',
+    'Chilli / Pepper',
+    'Banana',
+    'Citrus (Lemon / Orange)',
+    'Mango',
+    'Grapes',
+    'Brinjal (Eggplant)',
+    'Okra (Bhindi)',
+    'Mustard (Sarson)',
+    'Cabbage / Cauliflower',
   ];
 
   // High-accuracy agricultural sample presets
@@ -369,11 +386,12 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
     else if (lower.includes('maize') || lower.includes('corn')) cropKey = 'Maize (Corn)';
     else if (lower.includes('chilli') || lower.includes('pepper')) cropKey = 'Chilli';
     else if (lower.includes('soy')) cropKey = 'Soybean';
+    else if (!cropKey || cropKey === 'Auto-Detect') cropKey = 'Rice (Paddy)';
 
-    return CROP_DIAGNOSES[cropKey] || CROP_DIAGNOSES['Tomato'];
+    return CROP_DIAGNOSES[cropKey] || CROP_DIAGNOSES['Rice (Paddy)'] || CROP_DIAGNOSES['Tomato'];
   };
 
-  const triggerAnalysis = (
+  const triggerAnalysis = async (
     imageToAnalyze: string,
     fileName?: string,
     overrideDetection?: DetectionResult,
@@ -389,27 +407,136 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
     stages.forEach((st, idx) => {
       setTimeout(() => {
         setAnalysisStage(st);
-        if (st === 6) {
-          setTimeout(() => {
-            setIsAnalyzing(false);
-            const resolved =
-              overrideDetection ||
-              resolveDetectionForImage(imageToAnalyze, fileName, cropHint || selectedCropHint);
-
-            setAnalysisResult(resolved);
-            onShowToast(
-              language === 'kn'
-                ? `AI ವಿಶ್ಲೇಷಣೆ ಪೂರ್ಣಗೊಂಡಿದೆ: ${resolved.name}`
-                : language === 'te'
-                ? `AI విశ్లేషణ పూర్తయింది: ${resolved.name}`
-                : language === 'hi'
-                ? `AI विश्लेषण पूरा हुआ: ${resolved.name}`
-                : `AI Diagnosis Complete: ${resolved.name}`
-            );
-          }, 350);
-        }
-      }, (idx + 1) * 250);
+      }, (idx + 1) * 180);
     });
+
+    try {
+      if (overrideDetection) {
+        setTimeout(() => {
+          setIsAnalyzing(false);
+          setAnalysisResult(overrideDetection);
+        }, 1100);
+        return;
+      }
+
+      // Check if it matches a preset
+      const preset = samplePresets.find(p => p.url === imageToAnalyze);
+      if (preset?.detection && !imageToAnalyze.startsWith('data:image')) {
+        setTimeout(() => {
+          setIsAnalyzing(false);
+          setAnalysisResult(preset.detection);
+        }, 1100);
+        return;
+      }
+
+      // Send actual image to Python backend image classifier
+      const activeCrop = cropHint || selectedCropHint;
+      const response: any = await ClientDataService.runImageDetection({
+        image: imageToAnalyze,
+        crop: activeCrop,
+        growth_stage: 'Vegetative / Flowering',
+      });
+
+      setTimeout(() => {
+        setIsAnalyzing(false);
+        if (response && response.success === false) {
+          onShowToast(`Notice: ${response.message || 'Image rejected by quality validation'}`);
+          setAnalysisResult({
+            id: `REJ-${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString(),
+            crop: activeCrop,
+            category: 'Unverified Specimen',
+            name: response.error_type === 'NON_PLANT_SPECIMEN' ? 'Non-Plant Specimen' : (response.error_type || 'Quality Issue'),
+            confidence: 0.15,
+            severity: 'Low',
+            severity_pct: 15,
+            risk_level: 'LOW',
+            symptoms: [response.message || 'Image features did not match valid plant tissue.'],
+            possible_causes: ['Insufficient resolution, blur, poor illumination, or non-plant image content.'],
+            management_immediate: 'Please capture a clear, well-lit, steady close-up of the affected crop leaf, stem, or fruit.',
+            management_preventive: 'Avoid shadows and direct flash reflections when taking farm photos.',
+            management_biological: 'N/A',
+            management_ipm: 'N/A',
+            counterfactual_tip: 'A focused close-up of foliar lesions allows high-accuracy automated diagnosis.',
+            xai_factors: [],
+            // @ts-ignore
+            raw_response: response,
+          } as any);
+          return;
+        }
+
+        if (response && response.top_prediction) {
+          const top = response.top_prediction;
+          const detectedCropName = response.crop || (activeCrop !== 'Auto-Detect' ? activeCrop : 'Rice (Paddy)');
+          const isHealthyCondition = (top.name && top.name.toLowerCase().includes('healthy')) || top.severity === 'OPTIMAL';
+          const formatted: DetectionResult = {
+            id: response.id || `DET-${Date.now()}`,
+            timestamp: response.timestamp || new Date().toLocaleTimeString(),
+            crop: detectedCropName,
+            category: isHealthyCondition ? 'Healthy Foliage' : (top.pathogen || 'Fungal Pathogen'),
+            name: top.name,
+            confidence: top.confidence || 0.75,
+            severity: isHealthyCondition ? 'OPTIMAL' : (top.severity || 'Moderate'),
+            severity_pct: isHealthyCondition ? 0 : (top.severity_pct !== undefined ? top.severity_pct : (top.confidence_pct || 75)),
+            risk_level: isHealthyCondition ? 'LOW' : (response.risk_level || 'HIGH'),
+            symptoms: Array.isArray(response.symptoms) && response.symptoms.length > 0
+              ? response.symptoms
+              : isHealthyCondition
+              ? [
+                  'Uniform vibrant green leaf canopy and clean margins',
+                  'Intact cellular structure with zero necrotic or chlorotic lesions',
+                  'Absence of fungal sporulation, powdery mildew, or insect bores',
+                ]
+              : [top.symptoms || 'Foliar lesions observed.'],
+            possible_causes: Array.isArray(response.possible_causes) && response.possible_causes.length > 0
+              ? response.possible_causes
+              : isHealthyCondition
+              ? [
+                  'Optimal soil moisture retention and root-zone aeration',
+                  'Balanced macro & micronutrient uptake (NPK)',
+                  'Effective field sanitation and disease-free environment',
+                ]
+              : [top.primary_cause || 'Favorable microclimate.'],
+            management_immediate: isHealthyCondition
+              ? 'Zero curative fungicide or chemical spray needed. Foliage is clean and pathogen-free.'
+              : (response.management_immediate || top.chemical_guidance || 'Inspect leaf undersides.'),
+            management_preventive: isHealthyCondition
+              ? 'Continue routine preventive field scouting every 3-5 days and maintain balanced irrigation intervals.'
+              : (response.management_preventive || top.prevention || 'Maintain crop spacing.'),
+            management_biological: isHealthyCondition
+              ? 'Periodic prophylactic sprays of bio-stimulants (Jeevamrut, seaweed extract, or beneficial Trichoderma soil amendments).'
+              : (response.management_biological || top.organic_control || 'Apply bio-fungicide.'),
+            management_ipm: isHealthyCondition
+              ? 'Preserve beneficial predator insect fauna (ladybird beetles, hoverflies, spiders) and practice clean bund management.'
+              : (response.management_ipm || 'Follow CIBRC certified schedule.'),
+            counterfactual_tip: isHealthyCondition
+              ? 'Maintaining balanced soil organic matter sustains natural crop immunity.'
+              : (response.counterfactual_tip || 'Early scouting prevents spore spread.'),
+            xai_factors: response.xai_factors || [],
+            // @ts-ignore
+            raw_response: response,
+          };
+          setAnalysisResult(formatted);
+          if (detectedCropName && detectedCropName !== selectedCropHint && detectedCropName !== 'Auto-Detect') {
+            setSelectedCropHint(detectedCropName);
+          }
+          if (response.mismatch_warning) {
+            onShowToast(`Crop Notice: ${response.mismatch_warning}`);
+          } else {
+            onShowToast(`AI Diagnosis: ${formatted.name} (${detectedCropName})`);
+          }
+        } else {
+          const resolved = resolveDetectionForImage(imageToAnalyze, fileName, activeCrop);
+          setAnalysisResult(resolved);
+        }
+      }, 1150);
+    } catch {
+      setTimeout(() => {
+        setIsAnalyzing(false);
+        const resolved = resolveDetectionForImage(imageToAnalyze, fileName, cropHint || selectedCropHint);
+        setAnalysisResult(resolved);
+      }, 1150);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -421,7 +548,7 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
         size: sizeStr,
       });
 
-      // Infer crop hint from file name if present
+      // Infer crop hint from file name if present, else Auto-Detect
       const lower = file.name.toLowerCase();
       let detectedCrop = selectedCropHint;
       if (lower.includes('tomat')) detectedCrop = 'Tomato';
@@ -430,8 +557,16 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
       else if (lower.includes('potat')) detectedCrop = 'Potato';
       else if (lower.includes('wheat')) detectedCrop = 'Wheat';
       else if (lower.includes('maize') || lower.includes('corn')) detectedCrop = 'Maize (Corn)';
-      else if (lower.includes('chilli') || lower.includes('pepper')) detectedCrop = 'Chilli';
+      else if (lower.includes('chilli') || lower.includes('pepper')) detectedCrop = 'Chilli / Pepper';
       else if (lower.includes('soy')) detectedCrop = 'Soybean';
+      else if (lower.includes('okra') || lower.includes('bhindi')) detectedCrop = 'Okra (Bhindi)';
+      else if (lower.includes('brinjal') || lower.includes('eggplant')) detectedCrop = 'Brinjal (Eggplant)';
+      else if (lower.includes('mango')) detectedCrop = 'Mango';
+      else if (lower.includes('grape')) detectedCrop = 'Grapes';
+      else if (lower.includes('mustard') || lower.includes('sarson')) detectedCrop = 'Mustard (Sarson)';
+      else if (lower.includes('cabbage') || lower.includes('cauli')) detectedCrop = 'Cabbage / Cauliflower';
+      else if (lower.includes('pigeon') || lower.includes('arhar') || lower.includes('tur')) detectedCrop = 'Pigeon Pea (Arhar / Tur)';
+      else if (!selectedCropHint || selectedCropHint === 'Auto-Detect') detectedCrop = 'Auto-Detect';
 
       setSelectedCropHint(detectedCrop);
 
@@ -841,87 +976,244 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
                   </div>
                 </div>
 
-                {/* Key Status Micro-Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
-                  <div className="p-3 rounded-2xl bg-slate-50">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">{t.severity}</span>
-                    <span className="text-xs sm:text-sm font-bold text-orange-600 block mt-0.5">
-                      {analysisResult.severity || t.moderate}
-                    </span>
+                {/* OOD / Out-of-Distribution Warning Banner */}
+                {(((analysisResult as any).raw_response?.ood_detected) || (analysisResult as any).ood_detected || analysisResult.confidence < 0.40) && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-amber-900">Out-of-Distribution / Ambiguous Foliage Warning</div>
+                      <div className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                        {(analysisResult as any).raw_response?.ood_message || 'Unable to reliably identify this crop/disease. Visual evidence in this image is ambiguous. Please upload a clearer field image or inspect leaves physically.'}
+                      </div>
+                    </div>
                   </div>
+                )}
 
-                  <div className="p-3 rounded-2xl bg-slate-50">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">{t.healthStatus}</span>
-                    <span className="text-xs sm:text-sm font-bold text-amber-600 block mt-0.5">
-                      {t.needsAttention}
-                    </span>
+                {/* Limited Support Banner */}
+                {(((analysisResult as any).raw_response?.is_limited_support) || (analysisResult as any).is_limited_support) && (
+                  <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-start gap-2.5">
+                    <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-blue-900">Limited Support Advisory</div>
+                      <div className="text-[11px] text-blue-800 mt-0.5 leading-relaxed">
+                        {(analysisResult as any).raw_response?.limited_support_notice || 'This crop/disease has limited open-field training imagery. The diagnosis is provided for advisory guidance; verification by physical plant tissue scouting is recommended.'}
+                      </div>
+                    </div>
                   </div>
+                )}
 
-                  <div className="p-3 rounded-2xl bg-slate-50 col-span-2 sm:col-span-1">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Pathogen Type</span>
-                    <span className="text-xs sm:text-sm font-bold text-slate-800 block mt-0.5">
-                      {analysisResult.category || 'Fungal Pathogen'}
-                    </span>
+                {/* AI Voice Speaker Playback Card */}
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50 border border-emerald-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <span className="text-lg">🔊</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span>AI Voice Speaker</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold uppercase tracking-wider">
+                          Audio Briefing
+                        </span>
+                      </span>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        Listen to spoken diagnosis, severity, symptoms, and CIBRC treatment steps in {language === 'hi' ? 'Hindi' : language === 'mr' ? 'Marathi' : language === 'kn' ? 'Kannada' : language === 'te' ? 'Telugu' : 'English'}.
+                      </p>
+                    </div>
                   </div>
+                  <AiVoiceSpeakerButton
+                    text={speechService.formatDiagnosisForSpeech(analysisResult, language)}
+                    title={`${analysisResult.name} Diagnosis & Treatment`}
+                    variant="primary"
+                    size="md"
+                    label="🔊 Listen to AI Voice"
+                    className="shrink-0"
+                  />
                 </div>
+
+                {/* Key Status Micro-Grid */}
+                {(() => {
+                  const isHealthy = analysisResult.name?.toLowerCase().includes('healthy') ||
+                                    analysisResult.category?.toLowerCase().includes('healthy') ||
+                                    analysisResult.severity === 'OPTIMAL';
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
+                      <div className="p-3 rounded-2xl bg-slate-50">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">{t.severity}</span>
+                        <span className={`text-xs sm:text-sm font-bold block mt-0.5 ${
+                          isHealthy
+                            ? 'text-emerald-700'
+                            : analysisResult.severity === 'Critical'
+                            ? 'text-red-600'
+                            : 'text-orange-600'
+                        }`}>
+                          {isHealthy ? 'OPTIMAL (0% Loss)' : (analysisResult.severity || t.moderate)}
+                        </span>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-slate-50">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">{t.healthStatus}</span>
+                        <span className={`text-xs sm:text-sm font-bold block mt-0.5 ${
+                          isHealthy ? 'text-emerald-700' : 'text-amber-600'
+                        }`}>
+                          {isHealthy ? 'Healthy & Normal' : t.needsAttention}
+                        </span>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-slate-50 col-span-2 sm:col-span-1">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Pathogen Type</span>
+                        <span className={`text-xs sm:text-sm font-bold block mt-0.5 ${
+                          isHealthy ? 'text-emerald-700' : 'text-slate-800'
+                        }`}>
+                          {isHealthy ? 'None (Clean Foliage)' : (analysisResult.category || 'Foliar Pathogen')}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
-              {/* Problem Explanation */}
+              {/* Crop Mismatch Alert Banner */}
+              {(analysisResult as any)?.raw_response?.mismatch_warning && (
+                <div className="p-4 rounded-3xl bg-amber-50 border border-amber-300 text-amber-900 flex items-start gap-3 shadow-xs animate-fadeIn">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1 text-xs">
+                    <span className="font-bold text-sm block text-amber-950">Crop Mismatch Detected</span>
+                    <p className="leading-relaxed">
+                      {(analysisResult as any).raw_response.mismatch_warning}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Low Confidence / Ambiguity Notice */}
+              {(analysisResult as any)?.raw_response?.low_confidence_notice && (
+                <div className="p-4 rounded-3xl bg-blue-50 border border-blue-200 text-blue-950 flex items-start gap-3 text-xs shadow-xs animate-fadeIn">
+                  <HelpCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-sm">Field Scouting Recommended</span>
+                    <p className="text-blue-800 mt-0.5 leading-relaxed">
+                      {(analysisResult as any).raw_response.low_confidence_notice}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Top-3 Candidates & Visual Distribution */}
+              {(analysisResult as any)?.raw_response?.alternatives?.length > 0 && (
+                <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                    <span className="flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-emerald-600" />
+                      <span>AI Visual Candidate Ranking (Top Predictions)</span>
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
+                      {(analysisResult as any).raw_response.model_version || 'AgriSense-CV-v2.0.0'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs font-bold text-emerald-950">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px]">#1</span>
+                        <span>{analysisResult.name}</span>
+                      </div>
+                      <span>{(analysisResult.confidence * 100).toFixed(0)}% Match</span>
+                    </div>
+
+                    {(analysisResult as any).raw_response.alternatives.map((alt: any, idx: number) => (
+                      <div key={idx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs font-semibold text-slate-700">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px]">#{idx + 2}</span>
+                          <span>{alt.name}</span>
+                        </div>
+                        <span className="text-slate-500 font-medium">{(alt.confidence * 100).toFixed(0)}% Probability</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Problem Explanation / Health Assessment */}
               <div className="p-5 sm:p-6 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-4">
-                <div className="flex items-center gap-2">
-                  <Info className="w-4 h-4 text-emerald-700" />
-                  <h4 className="font-bold text-slate-900 text-sm sm:text-base font-display">
-                    {t.whatIsTheProblem}
-                  </h4>
-                </div>
+                {(() => {
+                  const isHealthy = analysisResult.name?.toLowerCase().includes('healthy') ||
+                                    analysisResult.category?.toLowerCase().includes('healthy') ||
+                                    analysisResult.severity === 'OPTIMAL';
+                  return (
+                    <>
+                      <div className="flex items-center gap-2">
+                        {isHealthy ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        ) : (
+                          <Info className="w-4 h-4 text-emerald-700" />
+                        )}
+                        <h4 className="font-bold text-slate-900 text-sm sm:text-base font-display">
+                          {isHealthy ? 'Crop Health Assessment' : t.whatIsTheProblem}
+                        </h4>
+                      </div>
 
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                  <strong className="text-slate-900">{analysisResult.name}</strong> is an active agricultural condition affecting {analysisResult.crop}. AI computer vision identified characteristic foliar lesions, leaf tissue discoloration, and pathogen activity requiring timely intervention.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
-                    <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                      <span>{t.symptoms}</span>
-                    </span>
-                    {analysisResult.symptoms && analysisResult.symptoms.length > 0 ? (
-                      <ul className="space-y-1.5 text-xs text-slate-600 leading-relaxed">
-                        {analysisResult.symptoms.map((sym, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5">
-                            <span className="text-emerald-700 font-bold">•</span>
-                            <span>{sym}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        Concentric circular dark spots on lower mature foliage, leaf margin curling, premature leaf drop.
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        {isHealthy ? (
+                          <>
+                            AI computer vision verified that your <strong className="text-slate-900">{analysisResult.crop}</strong> foliage exhibits vibrant green chlorophyll, intact cellular margins, and absence of necrotic foliar lesions or active fungal/bacterial pathogens. The crop is in an optimal physiological condition.
+                          </>
+                        ) : (
+                          <>
+                            <strong className="text-slate-900">{analysisResult.name}</strong> is an active agricultural condition affecting {analysisResult.crop}. AI computer vision identified characteristic foliar lesions, leaf tissue discoloration, and pathogen activity requiring timely intervention.
+                          </>
+                        )}
                       </p>
-                    )}
-                  </div>
 
-                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
-                    <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                      <Info className="w-3.5 h-3.5 text-blue-600" />
-                      <span>{t.causes}</span>
-                    </span>
-                    {analysisResult.possible_causes && analysisResult.possible_causes.length > 0 ? (
-                      <ul className="space-y-1.5 text-xs text-slate-600 leading-relaxed">
-                        {analysisResult.possible_causes.map((cause, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5">
-                            <span className="text-orange-600 font-bold">•</span>
-                            <span>{cause}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        Persistent high canopy humidity (&gt;75%), overhead splash irrigation, unpruned dense lower foliage.
-                      </p>
-                    )}
-                  </div>
-                </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+                          <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                            {isHealthy ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                            )}
+                            <span>{isHealthy ? 'Observed Health Indicators' : t.symptoms}</span>
+                          </span>
+                          {analysisResult.symptoms && analysisResult.symptoms.length > 0 ? (
+                            <ul className="space-y-1.5 text-xs text-slate-600 leading-relaxed">
+                              {analysisResult.symptoms.map((sym, idx) => (
+                                <li key={idx} className="flex items-start gap-1.5">
+                                  <span className="text-emerald-700 font-bold">•</span>
+                                  <span>{sym}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              {isHealthy ? 'Uniform vibrant green canopy without chlorotic discoloration.' : 'Concentric circular dark spots on lower mature foliage, leaf margin curling, premature leaf drop.'}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+                          <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                            <Info className="w-3.5 h-3.5 text-blue-600" />
+                            <span>{isHealthy ? 'Agronomic Conditions' : t.causes}</span>
+                          </span>
+                          {analysisResult.possible_causes && analysisResult.possible_causes.length > 0 ? (
+                            <ul className="space-y-1.5 text-xs text-slate-600 leading-relaxed">
+                              {analysisResult.possible_causes.map((cause, idx) => (
+                                <li key={idx} className="flex items-start gap-1.5">
+                                  <span className={isHealthy ? 'text-emerald-600 font-bold' : 'text-orange-600 font-bold'}>•</span>
+                                  <span>{cause}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              {isHealthy ? 'Favorable microclimate, adequate root-zone aeration, balanced nutrient uptake.' : 'Persistent high canopy humidity (>75%), overhead splash irrigation, unpruned dense lower foliage.'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Image Explanation & Explainable AI (Grad-CAM) */}
@@ -1034,45 +1326,83 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
                 </div>
 
                 {/* Tab Content */}
-                <div className="space-y-3 pt-1">
-                  {activeSolutionTab === 'treatment' && (
-                    <div className="space-y-2.5">
-                      {analysisResult.management_immediate && (
-                        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 font-semibold flex items-start gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider block">
-                              Immediate Curative Action:
-                            </span>
-                            <span className="mt-0.5 block leading-relaxed">{analysisResult.management_immediate}</span>
-                          </div>
+                {(() => {
+                  const isHealthy = analysisResult.name?.toLowerCase().includes('healthy') ||
+                                    analysisResult.category?.toLowerCase().includes('healthy') ||
+                                    analysisResult.severity === 'OPTIMAL';
+                  return (
+                    <div className="space-y-3 pt-1">
+                      {activeSolutionTab === 'treatment' && (
+                        <div className="space-y-2.5">
+                          {analysisResult.management_immediate && (
+                            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 font-semibold flex items-start justify-between gap-2.5">
+                              <div className="flex items-start gap-2.5">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
+                                <div>
+                                  <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider block">
+                                    {isHealthy ? 'Agronomic Care Recommendation:' : 'Immediate Curative Action:'}
+                                  </span>
+                                  <span className="mt-0.5 block leading-relaxed">{analysisResult.management_immediate}</span>
+                                </div>
+                              </div>
+                              <AiVoiceSpeakerButton
+                                text={`${isHealthy ? 'Care recommendation' : 'Immediate treatment'} for ${analysisResult.crop}. ${analysisResult.management_immediate}`}
+                                title={isHealthy ? 'Agronomic Care' : 'Immediate Chemical Treatment'}
+                                variant="compact"
+                                label="Speak"
+                                className="shrink-0"
+                              />
+                            </div>
+                          )}
+                          {(isHealthy
+                            ? [
+                                '1. Maintain regular irrigation intervals tailored to the current crop development stage.',
+                                '2. Apply balanced top-dressing nutrition (NPK) according to soil test recommendations.',
+                                '3. Keep field bunds, headlands, and drainage furrows clear of volunteer weed hosts.',
+                                '4. Continue routine visual scouting every 3-5 days for early seasonal pest or rust detection.',
+                              ]
+                            : [
+                                '1. Prune and safely incinerate or deep-bury all diseased lower foliage and severely infected branches.',
+                                '2. Ensure thorough, uniform spray coverage on both upper and lower leaf surfaces during morning hours.',
+                                '3. Disinfect pruning secateurs with a 10% sodium hypochlorite solution between individual plants.',
+                                '4. Re-inspect treated crop blocks after 4-5 days to confirm disease arrest and healthy new vegetative flushes.',
+                              ]
+                          ).map((step, idx) => (
+                            <div
+                              key={idx}
+                              className={`p-3 rounded-2xl border text-xs font-medium flex items-start gap-2.5 ${
+                                isHealthy
+                                  ? 'bg-emerald-50/50 border-emerald-100 text-emerald-900'
+                                  : 'bg-slate-50 border-slate-100 text-slate-700'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                              <span>{step}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
-                      {[
-                        '1. Prune and safely incinerate or deep-bury all diseased lower foliage and severely infected branches.',
-                        '2. Ensure thorough, uniform spray coverage on both upper and lower leaf surfaces during morning hours.',
-                        '3. Disinfect pruning secateurs with a 10% sodium hypochlorite solution between individual plants.',
-                        '4. Re-inspect treated crop blocks after 4-5 days to confirm disease arrest and healthy new vegetative flushes.',
-                      ].map((step, idx) => (
-                        <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-xs text-slate-700 font-medium flex items-start gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                          <span>{step}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
 
                   {activeSolutionTab === 'prevention' && (
                     <div className="space-y-2.5">
                       {analysisResult.management_preventive && (
-                        <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-950 font-semibold flex items-start gap-2.5">
-                          <ShieldCheck className="w-4 h-4 text-blue-700 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-blue-800 tracking-wider block">
-                              Agronomic Prevention Strategy:
-                            </span>
-                            <span className="mt-0.5 block leading-relaxed">{analysisResult.management_preventive}</span>
+                        <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-950 font-semibold flex items-start justify-between gap-2.5">
+                          <div className="flex items-start gap-2.5">
+                            <ShieldCheck className="w-4 h-4 text-blue-700 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-blue-800 tracking-wider block">
+                                Agronomic Prevention Strategy:
+                              </span>
+                              <span className="mt-0.5 block leading-relaxed">{analysisResult.management_preventive}</span>
+                            </div>
                           </div>
+                          <AiVoiceSpeakerButton
+                            text={`Agronomic prevention plan. ${analysisResult.management_preventive}`}
+                            title="Prevention Strategy"
+                            variant="compact"
+                            label="Speak"
+                            className="shrink-0"
+                          />
                         </div>
                       )}
                       {[
@@ -1092,14 +1422,23 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
                   {activeSolutionTab === 'remedies' && (
                     <div className="space-y-2.5">
                       {analysisResult.management_biological && (
-                        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 font-semibold flex items-start gap-2.5">
-                          <Leaf className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider block">
-                              Biological & Organic Remedy:
-                            </span>
-                            <span className="mt-0.5 block leading-relaxed">{analysisResult.management_biological}</span>
+                        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 font-semibold flex items-start justify-between gap-2.5">
+                          <div className="flex items-start gap-2.5">
+                            <Leaf className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider block">
+                                Biological & Organic Remedy:
+                              </span>
+                              <span className="mt-0.5 block leading-relaxed">{analysisResult.management_biological}</span>
+                            </div>
                           </div>
+                          <AiVoiceSpeakerButton
+                            text={`Biological organic treatment. ${analysisResult.management_biological}`}
+                            title="Organic Remedies"
+                            variant="compact"
+                            label="Speak"
+                            className="shrink-0"
+                          />
                         </div>
                       )}
                       {[
@@ -1118,14 +1457,23 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
                   {activeSolutionTab === 'costEffective' && (
                     <div className="space-y-2.5">
                       {analysisResult.management_ipm && (
-                        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 font-semibold flex items-start gap-2.5">
-                          <DollarSign className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider block">
-                              Cost-Effective IPM Solution:
-                            </span>
-                            <span className="mt-0.5 block leading-relaxed">{analysisResult.management_ipm}</span>
+                        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 font-semibold flex items-start justify-between gap-2.5">
+                          <div className="flex items-start gap-2.5">
+                            <DollarSign className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider block">
+                                Cost-Effective IPM Solution:
+                              </span>
+                              <span className="mt-0.5 block leading-relaxed">{analysisResult.management_ipm}</span>
+                            </div>
                           </div>
+                          <AiVoiceSpeakerButton
+                            text={`Integrated pest management advisory. ${analysisResult.management_ipm}`}
+                            title="IPM Solution"
+                            variant="compact"
+                            label="Speak"
+                            className="shrink-0"
+                          />
                         </div>
                       )}
                       {[
@@ -1141,7 +1489,9 @@ export const ModernAiScanView: React.FC<ModernAiScanViewProps> = ({
                     </div>
                   )}
                 </div>
-              </div>
+              );
+            })()}
+          </div>
 
               {/* Dedicated How to Prevent Section */}
               <div className="p-5 sm:p-6 rounded-3xl bg-emerald-50/80 border border-emerald-200 shadow-xs space-y-3">

@@ -7,6 +7,15 @@
 
 import { ParsedVoiceCommand, VoiceCommandType, VoiceRecognitionStatus } from '../types/speech';
 
+export interface SpeakerState {
+  isSpeaking: boolean;
+  isPaused: boolean;
+  currentText: string;
+  currentTitle: string;
+  playbackRate: number;
+  language: string;
+}
+
 type SpeechStateListener = (state: {
   status: VoiceRecognitionStatus;
   transcript: string;
@@ -15,6 +24,8 @@ type SpeechStateListener = (state: {
   errorMessage: string | null;
 }) => void;
 
+type SpeakerListener = (state: SpeakerState) => void;
+
 class SpeechService {
   private recognition: any = null;
   private isContinuousMode: boolean = true;
@@ -22,6 +33,7 @@ class SpeechService {
   private currentLanguage: 'mr-IN' | 'en-IN' | 'hi-IN' | 'en-US' | 'kn-IN' | 'te-IN' = 'en-IN';
   private voiceResponsesEnabled: boolean = true;
   private listeners: Set<SpeechStateListener> = new Set();
+  private speakerListeners: Set<SpeakerListener> = new Set();
   private audioCtx: AudioContext | null = null;
   private restartTimeout: any = null;
 
@@ -31,6 +43,16 @@ class SpeechService {
   private interimTranscript: string = '';
   private lastCommand: ParsedVoiceCommand | null = null;
   private errorMessage: string | null = null;
+
+  // Speaker / TTS State
+  private speakerState: SpeakerState = {
+    isSpeaking: false,
+    isPaused: false,
+    currentText: '',
+    currentTitle: '',
+    playbackRate: 1.0,
+    language: 'en-IN',
+  };
 
   constructor() {
     this.initRecognition();
@@ -258,34 +280,242 @@ class SpeechService {
   }
 
   /**
-   * Speak text out loud using browser Text-to-Speech
+   * Speaker Subsystem Event Subscriptions
    */
-  public speak(text: string, customLang?: string) {
-    if (!this.isSynthesisSupported() || !this.voiceResponsesEnabled) return;
+  public subscribeSpeaker(listener: SpeakerListener): () => void {
+    this.speakerListeners.add(listener);
+    listener({ ...this.speakerState });
+    return () => this.speakerListeners.delete(listener);
+  }
+
+  private notifySpeaker() {
+    const copy = { ...this.speakerState };
+    this.speakerListeners.forEach(l => l(copy));
+  }
+
+  public getSpeakerState(): SpeakerState {
+    return { ...this.speakerState };
+  }
+
+  public setPlaybackRate(rate: number) {
+    const clamped = Math.max(0.6, Math.min(1.8, rate));
+    this.speakerState.playbackRate = clamped;
+    if (this.speakerState.isSpeaking && !this.speakerState.isPaused) {
+      const curText = this.speakerState.currentText;
+      const curTitle = this.speakerState.currentTitle;
+      const curLang = this.speakerState.language;
+      this.speakText(curText, { title: curTitle, lang: curLang, rate: clamped });
+    } else {
+      this.notifySpeaker();
+    }
+  }
+
+  public stopSpeaking() {
+    if (this.isSynthesisSupported()) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {
+        console.warn('[SpeechService] Stop speaking error:', e);
+      }
+    }
+    this.speakerState.isSpeaking = false;
+    this.speakerState.isPaused = false;
+    this.speakerState.currentText = '';
+    this.speakerState.currentTitle = '';
+    this.notifySpeaker();
+  }
+
+  public pauseSpeaking() {
+    if (!this.isSynthesisSupported()) return;
+    try {
+      window.speechSynthesis.pause();
+      this.speakerState.isPaused = true;
+      this.notifySpeaker();
+    } catch (e) {
+      console.warn('[SpeechService] Pause speaking error:', e);
+    }
+  }
+
+  public resumeSpeaking() {
+    if (!this.isSynthesisSupported()) return;
+    try {
+      window.speechSynthesis.resume();
+      this.speakerState.isPaused = false;
+      this.notifySpeaker();
+    } catch (e) {
+      console.warn('[SpeechService] Resume speaking error:', e);
+    }
+  }
+
+  /**
+   * AI Voice Speaker: Speak text out loud with full state tracking,
+   * natural voice resolution, and agricultural pause spacing.
+   */
+  public speakText(
+    text: string,
+    options?: {
+      title?: string;
+      lang?: string;
+      rate?: number;
+      pitch?: number;
+      onEnd?: () => void;
+    }
+  ) {
+    if (!this.isSynthesisSupported()) return;
+    if (!text || !text.trim()) return;
 
     try {
-      window.speechSynthesis.cancel(); // Stop prior speech
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = customLang || this.currentLanguage;
-      utterance.rate = 1.05;
-      utterance.pitch = 1.0;
+      window.speechSynthesis.cancel();
 
-      // Find suitable voice if available
+      const langToUse = options?.lang || this.currentLanguage;
+      const rateToUse = options?.rate || this.speakerState.playbackRate || 1.0;
+      const titleToUse = options?.title || 'AI Field Advisory';
+
+      this.speakerState = {
+        isSpeaking: true,
+        isPaused: false,
+        currentText: text,
+        currentTitle: titleToUse,
+        playbackRate: rateToUse,
+        language: langToUse,
+      };
+      this.notifySpeaker();
+
+      // Clean markdown tokens for natural speech
+      const cleanText = text
+        .replace(/[#*`_~]/g, '')
+        .replace(/\n+/g, '. ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = langToUse;
+      utterance.rate = rateToUse;
+      utterance.pitch = options?.pitch || 1.0;
+
+      // Select natural regional voice if available
       const voices = window.speechSynthesis.getVoices();
-      if (voices.length > 0) {
-        const langPrefix = (customLang || this.currentLanguage).split('-')[0];
-        const match = voices.find(v => v.lang.startsWith(langPrefix)) ||
-                      voices.find(v => v.lang.includes('IN')) ||
-                      voices.find(v => v.lang.startsWith('en'));
+      if (voices && voices.length > 0) {
+        const langPrefix = langToUse.split('-')[0].toLowerCase();
+        const match =
+          voices.find(v => v.lang.toLowerCase() === langToUse.toLowerCase()) ||
+          voices.find(v => v.lang.toLowerCase().startsWith(langPrefix)) ||
+          voices.find(v => v.lang.includes('IN')) ||
+          voices.find(v => v.lang.toLowerCase().startsWith('en'));
         if (match) {
           utterance.voice = match;
         }
       }
 
+      utterance.onend = () => {
+        this.speakerState.isSpeaking = false;
+        this.speakerState.isPaused = false;
+        this.notifySpeaker();
+        if (options?.onEnd) options.onEnd();
+      };
+
+      utterance.onerror = (e) => {
+        console.warn('[SpeechService] TTS playback error:', e);
+        this.speakerState.isSpeaking = false;
+        this.speakerState.isPaused = false;
+        this.notifySpeaker();
+      };
+
       window.speechSynthesis.speak(utterance);
     } catch (e) {
       console.warn('[SpeechService] Synthesis error:', e);
+      this.speakerState.isSpeaking = false;
+      this.speakerState.isPaused = false;
+      this.notifySpeaker();
     }
+  }
+
+  /**
+   * Toggle AI Voice Speaker: If currently playing this text, stop. Otherwise start.
+   */
+  public toggleSpeaking(
+    text: string,
+    options?: { title?: string; lang?: string; rate?: number }
+  ) {
+    if (this.speakerState.isSpeaking && this.speakerState.currentText === text) {
+      this.stopSpeaking();
+    } else {
+      this.speakText(text, options);
+    }
+  }
+
+  /**
+   * Legacy voice prompt handler
+   */
+  public speak(text: string, customLang?: string) {
+    if (!this.voiceResponsesEnabled) return;
+    this.speakText(text, { lang: customLang, title: 'Voice Response' });
+  }
+
+  /**
+   * Format Crop Disease / Pest Diagnosis into a fluent, farmer-friendly spoken message
+   */
+  public formatDiagnosisForSpeech(
+    result: {
+      crop?: string;
+      name?: string;
+      confidence?: number;
+      severity?: string;
+      symptoms?: string[] | string;
+      management_immediate?: string;
+      management_biological?: string;
+      management_preventive?: string;
+    },
+    langCode: string = 'en'
+  ): string {
+    const crop = result.crop || 'Crop';
+    const name = result.name || 'Diagnosed Condition';
+    const severity = result.severity || 'Moderate';
+    const confPct = Math.round((result.confidence || 0.75) * 100);
+
+    const isHealthy = (result.name && result.name.toLowerCase().includes('healthy')) || severity === 'OPTIMAL';
+    if (isHealthy) {
+      if (langCode === 'hi' || langCode.startsWith('hi')) {
+        return `एग्रीसेंस फसल स्वास्थ्य रिपोर्ट। फसल: ${crop}। स्थिति: पूर्णतः स्वस्थ पत्तियां, किसी रोग के लक्षण नहीं हैं। मॉडल विश्वास: ${confPct} प्रतिशत। कोई रासायनिक उपचार की आवश्यकता नहीं है। नियमित सिंचाई और निगरानी जारी रखें।`;
+      }
+      if (langCode === 'mr' || langCode.startsWith('mr')) {
+        return `अॅग्रीसेन्स पीक आरोग्य अहवाल. पीक: ${crop}. स्थिती: निरोगी पीक, पानांवर रोगाची कोणतीही लक्षणे नाहीत. अचूकता: ${confPct} टक्के. रासायनिक फवारणीची गरज नाही. नियमित पाणी आणि खत व्यवस्थापन ठेवा.`;
+      }
+      if (langCode === 'kn' || langCode.startsWith('kn')) {
+        return `ಅಗ್ರೀಸೆನ್ಸ್ ಬೆಳೆ ಆರೋಗ್ಯ ವರದಿ. ಬೆಳೆ: ${crop}. ಸ್ಥಿತಿ: ಆರೋಗ್ಯಕರ ಬೆಳೆ, ಎಲೆಗಳಲ್ಲಿ ಯಾವುದೇ ರೋಗದ ಲಕ್ಷಣಗಳಿಲ್ಲ. ನಿಖರತೆ: ಶೇಕಡಾ ${confPct}. ಯಾವುದೇ ರಾಸಾಯನಿಕ ಸಿಂಪಡಣೆ ಅಗತ್ಯವಿಲ್ಲ. ನಿಯಮಿತ ನೀರಾವರಿ ಮುಂದುವರಿಸಿ.`;
+      }
+      if (langCode === 'te' || langCode.startsWith('te')) {
+        return `అగ్రిసెన్స్ పంట ఆరోగ్య నివేదిక. పంట: ${crop}. పరిస్థితి: ఆరోగ్యకరమైన పంట, ఎలాంటి తెగుళ్లు లేవు. ఖచ్చితత్వం: ${confPct} శాతం. ఎటువంటి రసాయన మందుల అవసరం లేదు. సాధారణ సంరక్షణ కొనసాగించండి.`;
+      }
+      return `AgriSense Crop Health Report. Crop: ${crop}. Health Assessment: Healthy Foliage with no visible lesions. The foliage exhibits optimal chlorophyll and vigor with ${confPct} percent model confidence. No chemical intervention is needed. Continue routine irrigation and preventive scouting.`;
+    }
+
+    const symptomsText = Array.isArray(result.symptoms)
+      ? result.symptoms.slice(0, 2).join('. ')
+      : result.symptoms || 'Foliar lesions observed on leaves.';
+
+    const immediate = result.management_immediate || 'Inspect leaf undersides and avoid moisture build up.';
+    const biological = result.management_biological || 'Apply neem based bio-formulation or beneficial microbes.';
+    const preventive = result.management_preventive || 'Maintain optimal plant spacing and monitor field weather.';
+
+    if (langCode === 'hi' || langCode.startsWith('hi')) {
+      return `एग्रीसेंस फसल निदान रिपोर्ट। फसल: ${crop}। समस्या: ${name}। गंभीरता: ${severity}। अनुमानित संभावना: ${confPct} प्रतिशत। मुख्य लक्षण: ${symptomsText}। तुरंत कार्रवाई: ${immediate}। जैविक व प्राकृतिक उपचार: ${biological}। भविष्य की रोकथाम: ${preventive}।`;
+    }
+
+    if (langCode === 'mr' || langCode.startsWith('mr')) {
+      return `अॅग्रीसेन्स शेती निदान अहवाल. पीक: ${crop}. समस्या किंवा कीड: ${name}. तीव्रता: ${severity}. अचूकता: ${confPct} टक्के. लक्षणे: ${symptomsText}. तात्काळ फवारणी व उपाय: ${immediate}. सेंद्रिय नियंत्रण: ${biological}. भविष्यातील प्रतिबंध: ${preventive}.`;
+    }
+
+    if (langCode === 'kn' || langCode.startsWith('kn')) {
+      return `ಅಗ್ರೀಸೆನ್ಸ್ ಬೆಳೆ ರೋಗ ವರದಿ. ಬೆಳೆ: ${crop}. ರೋಗ ಅಥವಾ ಕೀಟ: ${name}. ತೀವ್ರತೆ: ${severity}. ನಿಖರತೆ: ಶೇಕಡಾ ${confPct}. ತುರ್ತು ನಿರ್ವಹಣೆ: ${immediate}. ಸಾವಯವ ಚಿಕಿತ್ಸೆ: ${biological}. ತಡೆಗಟ್ಟುವ ಕ್ರಮ: ${preventive}.`;
+    }
+
+    if (langCode === 'te' || langCode.startsWith('te')) {
+      return `అగ్రిసెన్స్ పంట ఆరోగ్య నివేదిక. పంట: ${crop}. సమస్య: ${name}. తీవ్రత: ${severity}. ఖచ్చితత్వం: ${confPct} శాతం. తక్షణ చర్య: ${immediate}. సేంద్రీయ నివారణ: ${biological}. నివారణ పద్ధతులు: ${preventive}.`;
+    }
+
+    // Default English
+    return `AgriSense Crop Diagnosis Report. Crop: ${crop}. Identified condition: ${name}. Severity level: ${severity}. AI model confidence: ${confPct} percent. Key symptoms: ${symptomsText}. Immediate chemical or cultural action: ${immediate}. Biological and organic treatment: ${biological}. Long term prevention: ${preventive}.`;
   }
 
   /**

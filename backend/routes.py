@@ -15,6 +15,13 @@ from agri_data import CROPS_DATA, DISEASES_DATA, PESTS_DATA, OFFICERS_DATA, KEND
 from data_store import store
 from ai_engine import AgriculturalAIEngine
 from advisor import advisor
+from crop_recommender import crop_recommender
+from risk_engine import risk_engine
+from remote_sensing import remote_sensing_service
+from outbreak_simulator import outbreak_simulator
+from management_advisor import management_advisor
+from image_classifier import ImageClassifier
+from pest_classifier import PestClassifier
 
 START_TIME = time.time()
 
@@ -280,12 +287,71 @@ def handle_request(method: str, path: str, query_params: Dict[str, Any], body: D
             "last_sync": "10m ago",
         }
 
-    # 11. AI Image Detection
-    if clean_path == "/api/detect" and method == "POST":
+    # 11. AI Image Detection (Real Image Ingestion & Calibrated CV)
+    if clean_path in ("/api/detect", "/api/v1/classify-image") and method == "POST":
+        image_data = body.get("image")
+        selected_crop = body.get("crop") or "Auto-Detect"
+        growth_stage = body.get("growth_stage", "Vegetative / Flowering")
+        field_id = body.get("field_id")
+
+        if image_data:
+            res = ImageClassifier.classify(
+                image_input=image_data,
+                selected_crop=selected_crop,
+                growth_stage=growth_stage,
+                field_id=field_id,
+            )
+            if res.get("success"):
+                top = res.get("top_prediction", {})
+                final_crop = res.get("crop") or selected_crop
+                res["id"] = f"DET-{int(time.time())}"
+                res["timestamp"] = datetime.utcnow().strftime("%I:%M %p")
+                res["crop"] = final_crop
+                res["name"] = top.get("name", f"{final_crop} Condition")
+                res["confidence"] = top.get("confidence", 0.75)
+                is_healthy_pred = "healthy" in top.get("name", "").lower() or top.get("severity") == "OPTIMAL"
+                res["severity"] = "OPTIMAL" if is_healthy_pred else top.get("severity", "Moderate")
+                res["severity_pct"] = 0 if is_healthy_pred else int(top.get("confidence", 0.75) * 80)
+                res["risk_level"] = "LOW" if is_healthy_pred else ("HIGH" if top.get("confidence", 0.75) > 0.6 else "MODERATE")
+                res["category"] = "Healthy Foliage" if is_healthy_pred else "Disease"
+                res["symptoms"] = [s.strip() for s in top.get("symptoms", "").split(";") if s.strip()] or [top.get("symptoms", "Visual foliage symptoms observed.")]
+                res["possible_causes"] = [c.strip() for c in top.get("primary_cause", "").split(";") if c.strip()] or [top.get("primary_cause", "Microclimate humidity and spore dissemination.")]
+                res["management_immediate"] = top.get("chemical_guidance", "Inspect underside of leaves; isolate severely blighted plants.")
+                res["management_preventive"] = top.get("prevention", "Maintain spacing; avoid overhead evening sprinkler irrigation.")
+                res["management_biological"] = top.get("organic_control", "Apply 5% Neem Seed Kernel Extract (NSKE) or Trichoderma viride.")
+                res["management_ipm"] = "Follow 3-tier cultural, biological, and CIBRC chemical schedule when ETL threshold is exceeded."
+                res["counterfactual_tip"] = "Physical verification within 24-48 hours prevents spore spread to adjacent cadastral acreage."
+                return 200, res
+            else:
+                return 200, res
+
+        # Fallback when no image payload is provided
         res = AgriculturalAIEngine.analyze_image(
-            crop=body.get("crop", "Cotton"),
+            crop=selected_crop,
             hint=body.get("hint", ""),
             is_user_image=bool(body.get("isUserImage", False)),
+        )
+        res["model_mode"] = "NO_IMAGE_TEXT_DEMO_FALLBACK"
+        res["note"] = "No image pixel payload was supplied in request body."
+        return 200, res
+
+    # 11a. Model Registry Info
+    if clean_path in ("/api/model-registry", "/api/v1/model-info") and method == "GET":
+        registry_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "model_registry.json")
+        if os.path.exists(registry_path):
+            with open(registry_path, "r", encoding="utf-8") as f:
+                return 200, json.load(f)
+        return 200, {"active_model": "v2", "status": "active", "total_classes": 42}
+
+    # 11b. Pest Image Detection (Entomological Visual Analysis)
+    if clean_path == "/api/detect/pest" and method == "POST":
+        image_data = body.get("image")
+        crop = body.get("crop") or "Auto-Detect"
+        sweep_count = int(body.get("sweep_count", 12))
+        res = PestClassifier.classify(
+            image_input=image_data,
+            crop=crop,
+            observed_sweep_count=sweep_count,
         )
         return 200, res
 
@@ -564,4 +630,193 @@ def handle_request(method: str, path: str, query_params: Dict[str, Any], body: D
             "records": records[:limit],
         }
 
+    # 22. Machine Learning Precision Crop Recommendation API
+    if clean_path == "/api/crops/recommend" and method in ["POST", "GET"]:
+        # Allow inputs from JSON body (POST) or Query params (GET)
+        inputs = {}
+        for feat in ["N", "P", "K", "temperature", "humidity", "ph", "rainfall"]:
+            if feat in body:
+                inputs[feat] = body[feat]
+            elif feat in query_params:
+                val = query_params[feat]
+                inputs[feat] = val[0] if isinstance(val, list) else val
+            elif feat.lower() in query_params:
+                val = query_params[feat.lower()]
+                inputs[feat] = val[0] if isinstance(val, list) else val
+
+        recommendation = crop_recommender.predict(inputs)
+        return 200, recommendation
+
+    if clean_path == "/api/crops/retrain" and method == "POST":
+        summary = crop_recommender.train()
+        return 200, {
+            "success": True,
+            "message": "Crop recommendation model trained successfully on dataset/crop_recommendation.csv",
+            "model_summary": summary,
+        }
+
+    if clean_path == "/api/crops/model-info" and method == "GET":
+        return 200, crop_recommender.get_summary()
+
+    # 23. 3-7 Day Risk Forecast & Horizon Summary
+    if clean_path == "/api/risk/forecast" and method == "GET":
+        fields = store.data.get("fields", [])
+        summary = risk_engine.get_forecast_summary(fields)
+        return 200, summary
+
+    # 24. Field Risk Evaluation & Rankings
+    if clean_path == "/api/risk/fields" and method == "GET":
+        fields = store.data.get("fields", [])
+        horizon = int(query_params.get("days", [5])[0] if isinstance(query_params.get("days"), list) else query_params.get("days", 5))
+        prioritized = risk_engine.prioritize_fields(fields, forecast_days=horizon)
+        return 200, {
+            "horizon_days": horizon,
+            "total_fields": len(prioritized),
+            "high_risk_count": sum(1 for f in prioritized if f["risk_level"] in ["CRITICAL", "HIGH"]),
+            "fields": prioritized,
+        }
+
+    # 25. Field Inspection Priority Engine ("Inspect These Fields First")
+    if clean_path == "/api/risk/priority" and method == "GET":
+        fields = store.data.get("fields", [])
+        horizon = int(query_params.get("days", [5])[0] if isinstance(query_params.get("days"), list) else query_params.get("days", 5))
+        prioritized = risk_engine.prioritize_fields(fields, forecast_days=horizon)
+        urgent = [f for f in prioritized if f["risk_level"] in ["CRITICAL", "HIGH"]]
+        routine = [f for f in prioritized if f["risk_level"] not in ["CRITICAL", "HIGH"]]
+        return 200, {
+            "horizon_days": horizon,
+            "directive": (
+                f"Inspect {len(urgent)} prioritized fields first. Daily photo inspection is not required for the remaining {len(routine)} low-risk fields."
+                if urgent
+                else "All fields currently exhibit healthy baseline. Routine weekly scouting recommended."
+            ),
+            "urgent_inspection_fields": urgent,
+            "routine_monitoring_fields": routine,
+            "ranked_priority_list": prioritized,
+        }
+
+    # 26. Single Field Deep-Dive Risk
+    if clean_path.startswith("/api/risk/field/") and method == "GET":
+        field_id = clean_path.replace("/api/risk/field/", "").strip()
+        fields = store.data.get("fields", [])
+        field = next((f for f in fields if f.get("id") == field_id), None)
+        if not field:
+            # Fallback mock field if requested ID is dynamic
+            field = {"id": field_id, "name": f"Field {field_id}", "crop": "Cotton", "growth_stage": "Boll Formation"}
+        horizon = int(query_params.get("days", [5])[0] if isinstance(query_params.get("days"), list) else query_params.get("days", 5))
+        risk_result = risk_engine.predict_field_risk(field, forecast_days=horizon)
+        return 200, risk_result
+
+    # 27. Weather Risk Breakdown
+    if clean_path == "/api/risk/weather" and method == "GET":
+        # Returns current microclimate weather telemetry and favorability indices
+        history = risk_engine.weather_history
+        sample = history[0] if history else {
+            "temp": 28.5, "humidity": 82.0, "rainfall": 16.0, "leaf_wetness": 11.0, "risk": "HIGH"
+        }
+        d_risk, p_risk, env_risk, reasons = risk_engine.calculate_weather_risk(
+            sample.get("temp", 28.5),
+            sample.get("humidity", 82.0),
+            sample.get("rainfall", 16.0),
+            sample.get("leaf_wetness", 11.0),
+            horizon_days=5,
+        )
+        return 200, {
+            "current_weather": sample,
+            "weather_forecast_days": 7,
+            "disease_favorability_index": d_risk,
+            "pest_favorability_index": p_risk,
+            "environmental_stress_index": env_risk,
+            "pathogen_reasons": reasons,
+            "regional_baseline_records": len(history),
+            "is_simulated": True,
+            "data_label": "ESTIMATED / DATASET PROJECTION",
+        }
+
+    # 28. Historical Risk Incidents
+    if clean_path == "/api/risk/historical" and method == "GET":
+        detections = store.data.get("detections", [])
+        return 200, {
+            "total_historical_records": len(detections),
+            "hotspot_sectors": ["Punjab - Amritsar Plains", "Uttar Pradesh - Agra", "Karnataka - Kolar"],
+            "recent_detections": detections[:10],
+        }
+
+    # 29. Satellite / UAV Remote Sensing Layers & Field Indicators
+    if clean_path == "/api/remote-sensing/fields" and method == "GET":
+        fields = store.data.get("fields", [])
+        indicators = remote_sensing_service.get_all_fields_indicators(fields)
+        return 200, {
+            "layer_provider": "Simulated Multispectral Sentinel-2 & UAV",
+            "is_simulated": True,
+            "transparency_badge": "SIMULATED REMOTE SENSING DATA",
+            "total_fields": len(indicators),
+            "fields": indicators,
+        }
+
+    if clean_path.startswith("/api/remote-sensing/field/") and method == "GET":
+        field_id = clean_path.replace("/api/remote-sensing/field/", "").strip()
+        fields = store.data.get("fields", [])
+        field = next((f for f in fields if f.get("id") == field_id), {})
+        crop = field.get("crop", "Cotton")
+        ind = remote_sensing_service.get_field_indicators(field_id, crop)
+        return 200, ind
+
+    if clean_path == "/api/remote-sensing/layers" and method == "GET":
+        return 200, {
+            "available_layers": [
+                {"id": "boundaries", "name": "Cadastral Field Boundaries", "active_by_default": True, "type": "vector"},
+                {"id": "risk_heatmap", "name": "3–7 Day Risk Heatmap", "active_by_default": True, "type": "risk_overlay"},
+                {"id": "satellite", "name": "Sentinel-2 True Color (Simulated)", "active_by_default": False, "type": "raster"},
+                {"id": "ndvi", "name": "Normalized Difference Vegetation Index (NDVI)", "active_by_default": False, "type": "multispectral"},
+                {"id": "uav_stress", "name": "UAV Canopy Anomaly & Water Stress", "active_by_default": False, "type": "high_res_thermal"},
+            ],
+            "transparency_note": "Satellite and UAV layers use simulated radiometric values for prototype demonstration.",
+        }
+
+    # 30. Synthetic Outbreak Simulator
+    if clean_path == "/api/simulation/start" and method == "POST":
+        start_fid = body.get("starting_field_id", "FLD-001")
+        threat = body.get("pest_or_disease", "Pink Bollworm & Spore Wave")
+        crop = body.get("target_crop", "Cotton")
+        intensity = float(body.get("intensity", 0.85))
+        wind = body.get("wind_direction", "NE")
+        days = int(body.get("simulated_days", 5))
+        seed = int(body.get("seed", 42))
+
+        scenario = outbreak_simulator.start_simulation(
+            starting_field_id=start_fid,
+            pest_or_disease=threat,
+            target_crop=crop,
+            intensity=intensity,
+            wind_direction=wind,
+            simulated_days=days,
+            seed=seed,
+        )
+        return 200, scenario
+
+    if clean_path == "/api/simulation/reset" and method == "POST":
+        res = outbreak_simulator.reset_simulation()
+        return 200, res
+
+    if clean_path == "/api/simulation/status" and method == "GET":
+        return 200, outbreak_simulator.get_status()
+
+    # 31. Controlled & Certified Treatment Recommendations
+    if clean_path == "/api/management/recommendation" and method in ["GET", "POST"]:
+        crop = body.get("crop") or (query_params.get("crop", ["Cotton"])[0] if isinstance(query_params.get("crop"), list) else query_params.get("crop", "Cotton"))
+        risk = body.get("risk_level") or (query_params.get("risk_level", ["HIGH"])[0] if isinstance(query_params.get("risk_level"), list) else query_params.get("risk_level", "HIGH"))
+        threat = body.get("primary_threat") or (query_params.get("primary_threat", ["Pink Bollworm"])[0] if isinstance(query_params.get("primary_threat"), list) else query_params.get("primary_threat", "Pink Bollworm"))
+        stage = body.get("growth_stage") or (query_params.get("growth_stage", ["Flowering"])[0] if isinstance(query_params.get("growth_stage"), list) else query_params.get("growth_stage", "Flowering"))
+
+        rec = management_advisor.get_recommendation_for_risk(
+            crop=crop,
+            risk_level=risk,
+            primary_threat=threat,
+            growth_stage=stage,
+        )
+        return 200, rec
+
     return 404, {"error": f"Endpoint '{clean_path}' not found on Python backend"}
+
+

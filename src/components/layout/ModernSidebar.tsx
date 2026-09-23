@@ -17,12 +17,14 @@ import {
   ChevronRight,
   Sprout,
   LogOut,
+  ShieldAlert,
 } from 'lucide-react';
 import { AppLanguage, getLocale } from '../../locales';
 
 export type ModernNavTab =
   | 'home'
   | 'dashboard'
+  | 'early-warning'
   | 'ai-scan'
   | 'fields'
   | 'crop-health'
@@ -60,6 +62,7 @@ export const ModernSidebar: React.FC<ModernSidebarProps> = ({
 
   const mainNavItems = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
+    { id: 'early-warning', label: 'Risk Intelligence', icon: ShieldAlert, badge: '3-7D' },
     { id: 'ai-scan', label: t.aiCropScan, icon: ScanSearch, badge: 'AI' },
     { id: 'fields', label: t.myFields, icon: MapPin },
     { id: 'crop-health', label: t.cropHealth, icon: Activity },
@@ -70,6 +73,7 @@ export const ModernSidebar: React.FC<ModernSidebarProps> = ({
     { id: 'reports', label: t.reports, icon: FileText },
     { id: 'community', label: t.community, icon: Users },
   ] as const;
+
 
   const bottomNavItems = [
     { id: 'settings', label: t.settings, icon: Settings },

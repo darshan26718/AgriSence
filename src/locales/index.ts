@@ -28,8 +28,9 @@ export const AVAILABLE_LANGUAGES: {
 
 const STORAGE_KEY = 'agrisense_language';
 
-export const getLocale = (lang: AppLanguage): LocaleTranslations => {
-  return LOCALES[lang] || LOCALES.en;
+export const getLocale = (lang?: AppLanguage | string): LocaleTranslations => {
+  const normalized = (lang as AppLanguage) || 'en';
+  return LOCALES[normalized] || LOCALES.en;
 };
 
 export const loadLanguageFromStorage = (): AppLanguage => {

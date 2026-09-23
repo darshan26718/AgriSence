@@ -14,6 +14,7 @@ import {
   PhoneCall,
   Activity,
   Thermometer,
+  Radar,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -27,6 +28,7 @@ import {
 import { FieldRecord } from '../../types/agri';
 import { PushNotificationAlert } from '../../types/notification';
 import { AppLanguage, getLocale } from '../../locales';
+import { AiVoiceSpeakerButton } from '../speech/AiVoiceSpeakerButton';
 
 interface ModernDashboardViewProps {
   fields: FieldRecord[];
@@ -35,6 +37,7 @@ interface ModernDashboardViewProps {
   onNavigateToWeather?: () => void;
   onNavigateToAgroCentres?: () => void;
   onNavigateToAdvisory: (crop?: string) => void;
+  onNavigateToEarlyWarning?: () => void;
   onViewFieldDetails: (field: FieldRecord) => void;
   activeAlerts: PushNotificationAlert[];
   onDismissAlert: (id: string) => void;
@@ -48,6 +51,7 @@ export const ModernDashboardView: React.FC<ModernDashboardViewProps> = ({
   onNavigateToWeather,
   onNavigateToAgroCentres,
   onNavigateToAdvisory,
+  onNavigateToEarlyWarning,
   onViewFieldDetails,
   activeAlerts = [],
   onDismissAlert,
@@ -98,6 +102,15 @@ export const ModernDashboardView: React.FC<ModernDashboardViewProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {onNavigateToEarlyWarning && (
+              <button
+                onClick={onNavigateToEarlyWarning}
+                className="px-3 py-1 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Radar className="w-3.5 h-3.5" />
+                <span>Risk Radar</span>
+              </button>
+            )}
             <button
               onClick={() => onNavigateToAdvisory(topCriticalAlert.crop)}
               className="px-3 py-1 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold transition-colors cursor-pointer"
@@ -141,6 +154,16 @@ export const ModernDashboardView: React.FC<ModernDashboardViewProps> = ({
               <span>{t.scanCropBtn}</span>
             </button>
 
+            {onNavigateToEarlyWarning && (
+              <button
+                onClick={onNavigateToEarlyWarning}
+                className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs sm:text-sm shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+              >
+                <Radar className="w-4 h-4" />
+                <span>Risk Intelligence</span>
+              </button>
+            )}
+
             {onNavigateToWeather && (
               <button
                 onClick={onNavigateToWeather}
@@ -160,6 +183,15 @@ export const ModernDashboardView: React.FC<ModernDashboardViewProps> = ({
                 <span>{t.findAgroCentreBtn}</span>
               </button>
             )}
+
+            <AiVoiceSpeakerButton
+              text={`Welcome to AgriSense. You have ${totalFields} active fields under monitoring. Overall crop health across your holdings is ${healthyPct} percent. ${criticalCount > 0 ? `Alert: ${criticalCount} fields require urgent scouting due to elevated microclimate risk.` : 'All crop plots exhibit stable vegetative health.'} Today's soil moisture averages 75 percent with favorable conditions for field management.`}
+              title="Daily Farm Audio Briefing"
+              variant="outline"
+              size="md"
+              label="🔊 Listen to Farm Briefing"
+              className="bg-emerald-50/60 hover:bg-emerald-100/80 text-emerald-900 border-emerald-300"
+            />
           </div>
         </div>
 
@@ -207,9 +239,18 @@ export const ModernDashboardView: React.FC<ModernDashboardViewProps> = ({
         </div>
 
         {/* Stat 3: Disease Risk */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div
+          onClick={onNavigateToEarlyWarning}
+          className={`p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between transition-all ${
+            onNavigateToEarlyWarning ? 'cursor-pointer hover:border-amber-400 hover:shadow-md hover:bg-amber-50/20' : ''
+          }`}
+          title={onNavigateToEarlyWarning ? 'Click to open Risk Intelligence & Prioritized Inspections' : undefined}
+        >
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>{t.diseaseRisk}</span>
+            <span className="flex items-center gap-1.5">
+              <span>{t.diseaseRisk}</span>
+              {onNavigateToEarlyWarning && <ChevronRight className="w-3.5 h-3.5 text-amber-500" />}
+            </span>
             <div
               className={`w-8 h-8 rounded-xl flex items-center justify-center ${
                 criticalCount > 0 ? 'bg-orange-50 text-orange-600' : 'bg-slate-100 text-slate-600'

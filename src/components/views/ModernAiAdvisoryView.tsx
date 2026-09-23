@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { ClientDataService } from '../../services/clientDataService';
 import { AppLanguage, getLocale } from '../../locales';
+import { AiVoiceSpeakerButton } from '../speech/AiVoiceSpeakerButton';
+import { speechService } from '../../services/speechService';
 
 interface ChatMessage {
   id: string;
@@ -252,13 +254,12 @@ export const ModernAiAdvisoryView: React.FC<ModernAiAdvisoryViewProps> = ({
   };
 
   const speakMessage = (text: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = language === 'kn' ? 'kn-IN' : language === 'te' ? 'te-IN' : 'en-IN';
-      utterance.rate = 1.0;
-      window.speechSynthesis.speak(utterance);
-    }
+    const langCode =
+      language === 'kn' ? 'kn-IN' : language === 'te' ? 'te-IN' : language === 'hi' ? 'hi-IN' : 'en-IN';
+    speechService.toggleSpeaking(text, {
+      title: 'AI Farm Advisory Response',
+      lang: langCode,
+    });
   };
 
   return (
@@ -364,16 +365,12 @@ export const ModernAiAdvisoryView: React.FC<ModernAiAdvisoryViewProps> = ({
                   >
                     <span>{msg.timestamp}</span>
                     {!isUser && (
-                      <button
-                        onClick={() => speakMessage(msg.text)}
-                        className="text-slate-400 hover:text-emerald-700 p-0.5 cursor-pointer flex items-center gap-1"
-                        title="Listen to voice output"
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span className="text-[10px]">
-                          {language === 'kn' ? 'ಕೇಳಿ' : language === 'te' ? 'వినండి' : 'Listen'}
-                        </span>
-                      </button>
+                      <AiVoiceSpeakerButton
+                        text={msg.text}
+                        title="AI Advisory Response"
+                        variant="compact"
+                        label={language === 'kn' ? 'ಕೇಳಿ' : language === 'te' ? 'వినండి' : language === 'hi' ? 'सुनें' : 'Listen'}
+                      />
                     )}
                   </div>
                 </div>

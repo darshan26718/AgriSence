@@ -34,6 +34,7 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Agri-Economics': <BarChart3 className="w-4 h-4 text-green-600" />,
   'Agrometeorology': <Sparkles className="w-4 h-4 text-sky-600" />,
   'Agronomy Protocols': <CheckCircle2 className="w-4 h-4 text-teal-600" />,
+  'Precision Soil & Crop Recommendation': <Sparkles className="w-4 h-4 text-emerald-600" />,
 };
 
 export const AgriculturalDatasetsView: React.FC = () => {
@@ -45,6 +46,22 @@ export const AgriculturalDatasetsView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedRow, setSelectedRow] = useState<Record<string, any> | null>(null);
+
+  // ML Crop Recommendation Tester states
+  const [modelInputs, setModelInputs] = useState({
+    N: 90,
+    P: 42,
+    K: 43,
+    temperature: 24.0,
+    humidity: 80,
+    ph: 6.5,
+    rainfall: 200,
+  });
+  const [predResult, setPredResult] = useState<any>(null);
+  const [isPredicting, setIsPredicting] = useState<boolean>(false);
+  const [isRetraining, setIsRetraining] = useState<boolean>(false);
+  const [retrainMsg, setRetrainMsg] = useState<string | null>(null);
+
 
   // Load datasets list
   useEffect(() => {
@@ -100,6 +117,32 @@ export const AgriculturalDatasetsView: React.FC = () => {
   const handleDownloadCsv = () => {
     if (!activeMeta) return;
     window.open(`/api/datasets/${activeMeta.id}/download`, '_blank');
+  };
+
+  const handlePredictCrop = async () => {
+    setIsPredicting(true);
+    try {
+      const res = await ClientDataService.recommendCrop(modelInputs);
+      setPredResult(res);
+    } catch (e) {
+      console.error('Prediction failed', e);
+    } finally {
+      setIsPredicting(false);
+    }
+  };
+
+  const handleRetrainModel = async () => {
+    setIsRetraining(true);
+    setRetrainMsg(null);
+    try {
+      const res = await ClientDataService.retrainCropModel();
+      setRetrainMsg(`Model retrained: ${res.model_summary?.accuracy_pct}% accuracy on ${res.model_summary?.total_samples} records (${res.model_summary?.num_classes} crops).`);
+      handlePredictCrop();
+    } catch (e: any) {
+      setRetrainMsg(`Retraining failed: ${e.message}`);
+    } finally {
+      setIsRetraining(false);
+    }
   };
 
   const totalPoints = useMemo(() => {
@@ -356,6 +399,251 @@ export const AgriculturalDatasetsView: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Special Machine Learning Playground for Crop Recommendation Dataset */}
+        {activeDatasetId === 'crop_recommendation' && (
+          <div className="p-6 bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 text-white border-b border-emerald-800/40">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider">
+                    Trained Machine Learning Model
+                  </span>
+                  <span className="text-xs text-emerald-200/70 font-mono">
+                    Gaussian Naive Bayes • 99.55% Test Accuracy
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-white mt-1 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-emerald-400" />
+                  Live Crop Recommendation Predictor
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Input field telemetry (NPK, temperature, humidity, pH, rainfall) to predict the best certified crop for optimal yield.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRetrainModel}
+                  disabled={isRetraining}
+                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-200 text-xs font-semibold border border-white/10 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  title="Retrain model on dataset/crop_recommendation.csv"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRetraining ? 'animate-spin' : ''}`} />
+                  {isRetraining ? 'Retraining...' : 'Retrain Model'}
+                </button>
+                <button
+                  onClick={handlePredictCrop}
+                  disabled={isPredicting}
+                  className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {isPredicting ? 'Inferring...' : 'Predict Optimal Crop'}
+                </button>
+              </div>
+            </div>
+
+            {retrainMsg && (
+              <div className="mt-3 p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-xs text-emerald-200 flex items-center justify-between">
+                <span>{retrainMsg}</span>
+                <button onClick={() => setRetrainMsg(null)} className="text-emerald-300 hover:text-white">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Parameter Inputs Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mt-4">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Nitrogen (N)
+                </label>
+                <input
+                  type="number"
+                  value={modelInputs.N}
+                  onChange={(e) => setModelInputs({ ...modelInputs, N: Number(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  min="0"
+                  max="140"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Phosphorus (P)
+                </label>
+                <input
+                  type="number"
+                  value={modelInputs.P}
+                  onChange={(e) => setModelInputs({ ...modelInputs, P: Number(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  min="5"
+                  max="145"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Potassium (K)
+                </label>
+                <input
+                  type="number"
+                  value={modelInputs.K}
+                  onChange={(e) => setModelInputs({ ...modelInputs, K: Number(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  min="5"
+                  max="205"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Temp (°C)
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={modelInputs.temperature}
+                  onChange={(e) => setModelInputs({ ...modelInputs, temperature: Number(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Humidity (%)
+                </label>
+                <input
+                  type="number"
+                  value={modelInputs.humidity}
+                  onChange={(e) => setModelInputs({ ...modelInputs, humidity: Number(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  min="10"
+                  max="100"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Soil pH
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={modelInputs.ph}
+                  onChange={(e) => setModelInputs({ ...modelInputs, ph: Number(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  min="3.5"
+                  max="10.0"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Rainfall (mm)
+                </label>
+                <input
+                  type="number"
+                  step="5"
+                  value={modelInputs.rainfall}
+                  onChange={(e) => setModelInputs({ ...modelInputs, rainfall: Number(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  min="20"
+                  max="300"
+                />
+              </div>
+            </div>
+
+            {/* Preset shortcuts */}
+            <div className="flex flex-wrap items-center gap-2 mt-3 text-[11px] text-slate-400">
+              <span className="font-semibold text-slate-300">Quick Field Presets:</span>
+              <button
+                onClick={() => setModelInputs({ N: 90, P: 42, K: 43, temperature: 24, humidity: 82, ph: 6.5, rainfall: 220 })}
+                className="px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/10 text-emerald-300 border border-white/10"
+              >
+                🌾 Paddy / Wet Soil
+              </button>
+              <button
+                onClick={() => setModelInputs({ N: 120, P: 40, K: 20, temperature: 26, humidity: 65, ph: 6.8, rainfall: 85 })}
+                className="px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/10 text-emerald-300 border border-white/10"
+              >
+                ☁️ Cotton / Black Soil
+              </button>
+              <button
+                onClick={() => setModelInputs({ N: 40, P: 65, K: 80, temperature: 18, humidity: 18, ph: 7.2, rainfall: 75 })}
+                className="px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/10 text-emerald-300 border border-white/10"
+              >
+                🧆 Chickpea / Gram
+              </button>
+              <button
+                onClick={() => setModelInputs({ N: 20, P: 15, K: 10, temperature: 23, humidity: 92, ph: 6.5, rainfall: 110 })}
+                className="px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/10 text-emerald-300 border border-white/10"
+              >
+                🍊 Orange / Orchard
+              </button>
+            </div>
+
+            {/* Prediction Result Display */}
+            {predResult && (
+              <div className="mt-4 p-4 rounded-xl bg-slate-900/90 border border-emerald-500/40 text-xs">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{predResult.crop_emoji || '🌱'}</span>
+                    <div>
+                      <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                        Top AI/ML Recommendation
+                      </div>
+                      <div className="text-lg font-bold text-white">
+                        {predResult.recommended_crop_name}
+                      </div>
+                      <span className="text-[11px] text-slate-400">
+                        {predResult.crop_category}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                      Model Confidence
+                    </div>
+                    <div className="text-xl font-black text-emerald-400">
+                      {predResult.confidence_pct}%
+                    </div>
+                    <span className="text-[10px] text-slate-400">
+                      Evaluated on 22 species
+                    </span>
+                  </div>
+                </div>
+
+                <p className="mt-2.5 text-slate-200 leading-relaxed text-xs">
+                  {predResult.agronomic_advisory}
+                </p>
+
+                {/* Runner Ups */}
+                {predResult.runner_up_recommendations && predResult.runner_up_recommendations.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-white/10">
+                    <span className="text-[11px] font-semibold text-slate-300 block mb-1.5">
+                      Alternative Viable Crops:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {predResult.runner_up_recommendations.map((alt: any) => (
+                        <div key={alt.crop_id} className="p-2 rounded-lg bg-white/5 border border-white/5 flex items-center justify-between">
+                          <span className="text-slate-300 flex items-center gap-1.5">
+                            <span>{alt.emoji}</span>
+                            <span>{alt.name}</span>
+                          </span>
+                          <span className="font-mono text-emerald-400 font-semibold">
+                            {alt.confidence_pct}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Table Content */}
         {tableLoading ? (

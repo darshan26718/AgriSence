@@ -120,7 +120,7 @@ export const FloatingVoiceButton: React.FC<FloatingVoiceButtonProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-emerald-600" />
-                {t.voiceAssistant}
+                <span>Voice Assistant</span>
               </span>
               <button
                 onClick={onOpenGuide}

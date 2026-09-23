@@ -9,6 +9,7 @@ import os
 import json
 import argparse
 import mimetypes
+import traceback
 from urllib.parse import urlparse, parse_qs
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -39,6 +40,7 @@ class AgriRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+        self.send_header("Connection", "close")
         self.send_header("X-Powered-By", "AgriSense-Python-Engine/3.10")
 
     def do_OPTIONS(self):
@@ -47,22 +49,26 @@ class AgriRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        query_params = parse_qs(parsed.query)
+        try:
+            parsed = urlparse(self.path)
+            path = parsed.path
+            query_params = parse_qs(parsed.query)
 
-        # If it's an API route
-        if path.startswith("/api/"):
-            status_code, response_data = handle_request("GET", path, query_params, {})
-            self._send_json_response(status_code, response_data)
-            return
+            # If it's an API route
+            if path.startswith("/api/"):
+                status_code, response_data = handle_request("GET", path, query_params, {})
+                self._send_json_response(status_code, response_data)
+                return
 
-        # If serving static files in standalone mode
-        if getattr(self.server, "serve_static", False):
-            self._serve_static_file(path)
-            return
+            # If serving static files in standalone mode
+            if getattr(self.server, "serve_static", False):
+                self._serve_static_file(path)
+                return
 
-        self._send_json_response(404, {"error": "Not Found", "path": path})
+            self._send_json_response(404, {"error": "Not Found", "path": path})
+        except Exception as e:
+            traceback.print_exc()
+            self._send_json_response(500, {"error": str(e)})
 
     def do_POST(self):
         parsed = urlparse(self.path)
